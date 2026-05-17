@@ -34,6 +34,7 @@ export function Devices() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const profileNameById = new Map(profiles.map((profile) => [profile.PK, profile.name]));
 
   const filteredDevices = devices.filter((d: Device) => {
     const matchesSearch = toSearchableText(d.name).includes(searchQuery.toLowerCase()) ||
@@ -102,6 +103,16 @@ export function Devices() {
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredDevices.map((device) => {
           const Icon = getDeviceIcon(device.type);
+          const resolvedProfile = profiles.find(
+            (profile) => profile.PK === device.profile || profile.name === device.profile
+          );
+          const assignedProfileName =
+            device.profile_name ||
+            resolvedProfile?.name ||
+            profileNameById.get(device.profile) ||
+            device.profile ||
+            'Unassigned';
+          const assignedProfileValue = resolvedProfile?.PK || device.profile || '';
           return (
             <Card key={device.PK} className="glass-card hover:shadow-lg transition-shadow">
               <CardContent className="p-5">
@@ -140,11 +151,11 @@ export function Devices() {
                       <span className="text-xs">Profile</span>
                     </div>
                     <Select
-                      value={device.profile}
+                      value={assignedProfileValue}
                       onValueChange={(value) => updateDeviceProfile(device.PK, value)}
                     >
-                      <SelectTrigger className="h-8 text-xs border-0 bg-transparent p-0">
-                        <SelectValue />
+                      <SelectTrigger className="h-9 w-full rounded-md border border-border/60 bg-background/50 px-2.5 text-xs shadow-none">
+                        <SelectValue placeholder={assignedProfileName} />
                       </SelectTrigger>
                       <SelectContent>
                         {profiles.map((p) => (

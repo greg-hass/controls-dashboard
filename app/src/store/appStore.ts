@@ -113,6 +113,25 @@ const normalizeNetworkStats = (value: unknown): NetworkStats[] =>
     }))
     .filter((item) => item.pop !== 'unknown');
 
+const enrichDevicesWithProfileNames = (deviceList: Device[], profileList: Profile[]) => {
+  const profileById = new Map(profileList.map((profile) => [profile.PK, profile.name]));
+  const profileByName = new Map(profileList.map((profile) => [profile.name, profile.name]));
+
+  return deviceList.map((device) => {
+    const profileName =
+      device.profile_name ||
+      profileById.get(device.profile) ||
+      profileByName.get(device.profile) ||
+      device.profile ||
+      '';
+
+    return {
+      ...device,
+      profile_name: profileName,
+    };
+  });
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -213,7 +232,10 @@ export const useAppStore = create<AppState>()(
           ]);
 
           const profiles = asArray<Profile>(profilesRes.body);
-          const devices = asArray<Device>(devicesRes.body);
+          const devices = enrichDevicesWithProfileNames(
+            asArray<Device>(devicesRes.body),
+            profiles
+          );
           const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
           const networkStats = normalizeNetworkStats(netRes.body);
 
@@ -277,7 +299,9 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const res = await api.getDevices();
-          set({ devices: asArray<Device>(res.body) });
+          set((state) => ({
+            devices: enrichDevicesWithProfileNames(asArray<Device>(res.body), state.profiles),
+          }));
         } catch (err) {
           set({ error: 'Failed to refresh devices' });
         }
