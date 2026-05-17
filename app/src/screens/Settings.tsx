@@ -11,12 +11,14 @@ import {
   RotateCcw,
   Smartphone,
   Clock,
+  TriangleAlert,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -32,23 +34,43 @@ export function Settings() {
   const darkMode = useAppStore((state) => state.darkMode);
   const setDarkMode = useAppStore((state) => state.setDarkMode);
   const user = useAppStore((state) => state.user);
+  const error = useAppStore((state) => state.error);
   const loadAllData = useAppStore((state) => state.loadAllData);
 
   const [localSettings, setLocalSettings] = useState(settings);
   const [showToken, setShowToken] = useState(false);
 
-  const handleSave = () => {
-    setSettings(localSettings);
-    toast.success('Settings saved successfully');
-    if (!localSettings.demoMode && localSettings.apiToken) {
-      loadAllData();
+  const handleSave = async () => {
+    const nextSettings = {
+      ...localSettings,
+      apiToken: localSettings.apiToken.trim(),
+      demoMode: localSettings.apiToken.trim() ? false : localSettings.demoMode,
+    };
+
+    setLocalSettings(nextSettings);
+    setSettings(nextSettings);
+
+    if (!nextSettings.demoMode && nextSettings.apiToken) {
+      toast.info('Live mode enabled. Loading Control D data...');
+      await loadAllData();
+
+      const { error } = useAppStore.getState();
+      if (error) {
+        toast.error(error, { duration: 10000 });
+        return;
+      }
+
+      toast.success('Settings saved and live data refreshed');
+      return;
     }
+
+    toast.success('Settings saved successfully');
   };
 
   const handleReset = () => {
     setLocalSettings({
       apiToken: '',
-      apiBaseUrl: 'https://api.controld.com',
+      apiBaseUrl: '/api',
       theme: 'dark',
       refreshInterval: 60,
       demoMode: true,
@@ -65,6 +87,14 @@ export function Settings() {
           Configure your Control D Home dashboard
         </p>
       </div>
+
+      {error && !settings.demoMode && (
+        <Alert variant="destructive">
+          <TriangleAlert className="w-4 h-4" />
+          <AlertTitle>Control D connection failed</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Account Info */}
       {user && (
@@ -152,7 +182,7 @@ export function Settings() {
           <div>
             <label className="text-sm font-medium mb-1.5 block">API Base URL</label>
             <Input
-              placeholder="https://api.controld.com"
+              placeholder="/api"
               value={localSettings.apiBaseUrl}
               onChange={(e) => setLocalSettings({ ...localSettings, apiBaseUrl: e.target.value })}
             />

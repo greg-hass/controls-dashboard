@@ -69,10 +69,15 @@ interface AppState {
 
 const defaultSettings: AppSettings = {
   apiToken: '',
-  apiBaseUrl: 'https://api.controld.com',
+  apiBaseUrl: '/api',
   theme: 'dark',
   refreshInterval: 60,
   demoMode: true,
+};
+
+const normalizeApiBaseUrl = (url: string) => {
+  const trimmed = url.trim().replace(/\/$/, '');
+  return trimmed === 'https://api.controld.com' ? '/api' : trimmed;
 };
 
 export const useAppStore = create<AppState>()(
@@ -81,7 +86,11 @@ export const useAppStore = create<AppState>()(
       // Settings
       settings: { ...defaultSettings },
       setSettings: (newSettings) => {
-        const updated = { ...get().settings, ...newSettings };
+        const updated = {
+          ...get().settings,
+          ...newSettings,
+          apiBaseUrl: normalizeApiBaseUrl(newSettings.apiBaseUrl ?? get().settings.apiBaseUrl),
+        };
         set({ settings: updated });
         api.setToken(updated.apiToken);
         api.setBaseUrl(updated.apiBaseUrl);
@@ -146,6 +155,20 @@ export const useAppStore = create<AppState>()(
           // Real API calls
           api.setToken(settings.apiToken);
           api.setBaseUrl(settings.apiBaseUrl);
+          set({
+            user: null,
+            profiles: [],
+            devices: [],
+            services: [],
+            serviceCategories: [],
+            filters: [],
+            customRules: [],
+            ruleFolders: [],
+            analyticsLevels: [],
+            storageRegions: [],
+            ipInfo: null,
+            networkStats: [],
+          });
 
           const [userRes, profilesRes, devicesRes, categoriesRes, ipRes, netRes] = await Promise.all([
             api.getUser(),
@@ -178,6 +201,18 @@ export const useAppStore = create<AppState>()(
           });
         } catch (err) {
           set({
+            user: null,
+            profiles: [],
+            devices: [],
+            services: [],
+            serviceCategories: [],
+            filters: [],
+            customRules: [],
+            ruleFolders: [],
+            analyticsLevels: [],
+            storageRegions: [],
+            ipInfo: null,
+            networkStats: [],
             error: err instanceof Error ? err.message : 'Failed to load data',
             isLoading: false,
           });
@@ -335,6 +370,22 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'controld-home-storage',
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<AppState>;
+        const settings = {
+          ...current.settings,
+          ...persistedState.settings,
+          apiBaseUrl: normalizeApiBaseUrl(
+            persistedState.settings?.apiBaseUrl ?? current.settings.apiBaseUrl
+          ),
+        };
+
+        return {
+          ...current,
+          ...persistedState,
+          settings,
+        };
+      },
       partialize: (state) => ({
         settings: state.settings,
         darkMode: state.darkMode,

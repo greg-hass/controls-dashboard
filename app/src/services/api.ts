@@ -20,7 +20,7 @@ import type {
 
 class ControlDApi {
   private token: string = '';
-  private baseUrl: string = 'https://api.controld.com';
+  private baseUrl: string = '/api';
 
   setToken(token: string) {
     this.token = token;
@@ -50,11 +50,25 @@ class ControlDApi {
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    let data: {
+      success?: boolean;
+      error?: {
+        message?: string;
+      };
+    };
+
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(`Control D API error: ${response.status} ${response.statusText || 'Request failed'}`);
     }
 
-    return response.json();
+    if (!response.ok || data?.success === false) {
+      const message = data?.error?.message || response.statusText || 'Request failed';
+      throw new Error(`Control D API error: ${message}`);
+    }
+
+    return data as T;
   }
 
   // Account
