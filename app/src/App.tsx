@@ -17,10 +17,15 @@ import './App.css';
 function AppContent() {
   const darkMode = useAppStore((state) => state.darkMode);
   const loadAllData = useAppStore((state) => state.loadAllData);
+  const syncDeviceSuspensions = useAppStore((state) => state.syncDeviceSuspensions);
 
   useEffect(() => {
     loadAllData();
   }, [loadAllData]);
+
+  useEffect(() => {
+    syncDeviceSuspensions();
+  }, [syncDeviceSuspensions]);
 
   useEffect(() => {
     if (darkMode) {

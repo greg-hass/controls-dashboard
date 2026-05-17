@@ -38,6 +38,7 @@ interface AppState {
   ipInfo: IPInfo | null;
   networkStats: NetworkStats[];
   quickActions: QuickAction[];
+  deviceSuspensions: Record<string, DeviceSuspension>;
 
   // UI State
   isLoading: boolean;
@@ -58,13 +59,22 @@ interface AppState {
   refreshDevices: () => Promise<void>;
   refreshServices: () => Promise<void>;
   refreshRules: (profileId: string) => Promise<void>;
+  syncDeviceSuspensions: () => void;
 
   // Mutations
   updateProfileServices: (profileId: string, serviceId: string, status: number) => Promise<void>;
   updateFilter: (profileId: string, filterId: string, status: number) => Promise<void>;
   updateDeviceProfile: (deviceId: string, profileId: string) => Promise<void>;
+  updateDeviceStatus: (deviceId: string, status: number) => Promise<void>;
+  disableDeviceTemporarily: (deviceId: string, durationMinutes: number) => Promise<void>;
+  restoreDeviceStatus: (deviceId: string) => Promise<void>;
   createCustomRule: (profileId: string, rule: Partial<CustomRule>) => Promise<void>;
   deleteCustomRule: (profileId: string, hostname: string) => Promise<void>;
+}
+
+interface DeviceSuspension {
+  expiresAt: number;
+  restoreStatus: number;
 }
 
 const defaultSettings: AppSettings = {
@@ -133,6 +143,15 @@ const enrichDevicesWithProfileNames = (deviceList: Device[], profileList: Profil
 };
 
 let loadSequence = 0;
+const deviceSuspendTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+const clearDeviceSuspendTimer = (deviceId: string) => {
+  const timer = deviceSuspendTimers.get(deviceId);
+  if (timer) {
+    clearTimeout(timer);
+  }
+  deviceSuspendTimers.delete(deviceId);
+};
 
 const loadServicesByCategories = async (serviceCategories: ServiceCategory[]) => {
   const results = await Promise.all(
@@ -179,6 +198,7 @@ export const useAppStore = create<AppState>()(
       ipInfo: null,
       networkStats: [],
       quickActions: mock.mockQuickActions,
+      deviceSuspensions: {},
 
       // UI State
       isLoading: false,
@@ -354,6 +374,26 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      syncDeviceSuspensions: () => {
+        const now = Date.now();
+        const suspensions = get().deviceSuspensions;
+
+        Object.entries(suspensions).forEach(([deviceId, suspension]) => {
+          clearDeviceSuspendTimer(deviceId);
+
+          if (suspension.expiresAt <= now) {
+            void get().restoreDeviceStatus(deviceId).catch(() => undefined);
+            return;
+          }
+
+          const timer = setTimeout(() => {
+            void get().restoreDeviceStatus(deviceId).catch(() => undefined);
+          }, suspension.expiresAt - now);
+
+          deviceSuspendTimers.set(deviceId, timer);
+        });
+      },
+
       // Mutations
       updateProfileServices: async (profileId, serviceId, status) => {
         if (get().settings.demoMode) {
@@ -406,6 +446,68 @@ export const useAppStore = create<AppState>()(
         } catch (err) {
           set({ error: 'Failed to update device' });
         }
+      },
+
+      updateDeviceStatus: async (deviceId, status) => {
+        if (get().settings.demoMode) {
+          set((state) => ({
+            devices: state.devices.map((device) =>
+              device.PK === deviceId ? { ...device, status } : device
+            ),
+          }));
+          return;
+        }
+
+        try {
+          await api.updateDevice(deviceId, { status });
+          set((state) => ({
+            devices: state.devices.map((device) =>
+              device.PK === deviceId ? { ...device, status } : device
+            ),
+          }));
+        } catch (err) {
+          set({ error: 'Failed to update device status' });
+          throw err;
+        }
+      },
+
+      disableDeviceTemporarily: async (deviceId, durationMinutes) => {
+        const device = get().devices.find((item) => item.PK === deviceId);
+        if (!device) {
+          throw new Error('Device not found');
+        }
+
+        const restoreStatus = device.status === 2 ? 1 : device.status;
+        const expiresAt = Date.now() + durationMinutes * 60 * 1000;
+
+        await get().updateDeviceStatus(deviceId, 2);
+
+        set((state) => ({
+          deviceSuspensions: {
+            ...state.deviceSuspensions,
+            [deviceId]: { expiresAt, restoreStatus },
+          },
+        }));
+
+        clearDeviceSuspendTimer(deviceId);
+        const timer = setTimeout(() => {
+          void get().restoreDeviceStatus(deviceId).catch(() => undefined);
+        }, durationMinutes * 60 * 1000);
+        deviceSuspendTimers.set(deviceId, timer);
+      },
+
+      restoreDeviceStatus: async (deviceId) => {
+        const suspension = get().deviceSuspensions[deviceId];
+        const restoreStatus = suspension?.restoreStatus ?? 1;
+
+        clearDeviceSuspendTimer(deviceId);
+
+        await get().updateDeviceStatus(deviceId, restoreStatus);
+
+        set((state) => {
+          const { [deviceId]: _removed, ...rest } = state.deviceSuspensions;
+          return { deviceSuspensions: rest };
+        });
       },
 
       createCustomRule: async (profileId, rule) => {
@@ -463,6 +565,7 @@ export const useAppStore = create<AppState>()(
         settings: state.settings,
         darkMode: state.darkMode,
         sidebarOpen: state.sidebarOpen,
+        deviceSuspensions: state.deviceSuspensions,
       }),
     }
   )

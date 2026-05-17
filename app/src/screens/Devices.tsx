@@ -10,6 +10,10 @@ import {
   Activity,
   Search,
   Filter,
+  MoreHorizontal,
+  Ban,
+  RefreshCcw,
+  Clock3,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,8 +26,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { Device } from '@/types/controld';
+import { toast } from 'sonner';
 
 const toSearchableText = (value: unknown) => String(value ?? '').toLowerCase();
 
@@ -31,10 +44,14 @@ export function Devices() {
   const devices = useAppStore((state) => state.devices);
   const profiles = useAppStore((state) => state.profiles);
   const updateDeviceProfile = useAppStore((state) => state.updateDeviceProfile);
+  const disableDeviceTemporarily = useAppStore((state) => state.disableDeviceTemporarily);
+  const restoreDeviceStatus = useAppStore((state) => state.restoreDeviceStatus);
+  const deviceSuspensions = useAppStore((state) => state.deviceSuspensions);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const profileNameById = new Map(profiles.map((profile) => [profile.PK, profile.name]));
+  const disableDurations = [15, 30, 60, 240];
 
   const filteredDevices = devices.filter((d: Device) => {
     const matchesSearch = toSearchableText(d.name).includes(searchQuery.toLowerCase()) ||
@@ -54,7 +71,39 @@ export function Devices() {
   };
 
   const getStatusColor = (status: number) => {
+    if (status === 2) return 'bg-amber-500';
+    if (status === 3) return 'bg-red-500';
     return status === 1 ? 'bg-emerald-500' : 'bg-red-500';
+  };
+
+  const formatRemaining = (expiresAt?: number) => {
+    if (!expiresAt) return '';
+    const remainingMinutes = Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000));
+    if (remainingMinutes < 60) {
+      return `${remainingMinutes}m`;
+    }
+
+    const hours = Math.floor(remainingMinutes / 60);
+    const minutes = remainingMinutes % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  };
+
+  const handleTempDisable = async (deviceId: string, deviceName: string, minutes: number) => {
+    try {
+      await disableDeviceTemporarily(deviceId, minutes);
+      toast.success(`DNS paused for ${deviceName} for ${minutes} minutes`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to pause DNS');
+    }
+  };
+
+  const handleRestore = async (deviceId: string, deviceName: string) => {
+    try {
+      await restoreDeviceStatus(deviceId);
+      toast.success(`DNS restored for ${deviceName}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to restore DNS');
+    }
   };
 
   return (
@@ -113,6 +162,8 @@ export function Devices() {
             device.profile ||
             'Unassigned';
           const assignedProfileValue = resolvedProfile?.PK || device.profile || '';
+          const suspension = deviceSuspensions[device.PK];
+          const remainingLabel = suspension ? formatRemaining(suspension.expiresAt) : '';
           return (
             <Card key={device.PK} className="glass-card hover:shadow-lg transition-shadow">
               <CardContent className="p-5">
@@ -138,9 +189,48 @@ export function Devices() {
                       </div>
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {device.type}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {device.status === 2 && (
+                      <Badge variant="secondary" className="text-amber-500 border-amber-500/20">
+                        DNS paused
+                      </Badge>
+                    )}
+                    {device.status === 3 && (
+                      <Badge variant="destructive" className="text-xs">
+                        Hard disabled
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {device.type}
+                    </Badge>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel>Device actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {device.status === 2 ? (
+                          <DropdownMenuItem onSelect={() => handleRestore(device.PK, device.name)}>
+                            <RefreshCcw className="w-4 h-4" />
+                            Restore DNS now
+                          </DropdownMenuItem>
+                        ) : (
+                          disableDurations.map((minutes) => (
+                            <DropdownMenuItem
+                              key={minutes}
+                              onSelect={() => handleTempDisable(device.PK, device.name, minutes)}
+                            >
+                              <Ban className="w-4 h-4" />
+                              Soft disable for {minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}
+                            </DropdownMenuItem>
+                          ))
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
 
                 {/* Stats */}
@@ -165,6 +255,12 @@ export function Devices() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {suspension && (
+                      <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-500">
+                        <Clock3 className="w-3.5 h-3.5" />
+                        <span>Resumes in {remainingLabel}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="p-2.5 rounded-lg bg-secondary/30">
                     <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
