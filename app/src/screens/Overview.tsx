@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '@/store/appStore';
 import {
@@ -40,11 +39,6 @@ export function Overview() {
   const networkStats = useAppStore((state) => state.networkStats);
   const filters = useAppStore((state) => state.filters);
   const ipInfo = useAppStore((state) => state.ipInfo);
-  const loadAllData = useAppStore((state) => state.loadAllData);
-
-  useEffect(() => {
-    loadAllData();
-  }, [loadAllData]);
 
   const stats = {
     profiles: profiles.length,

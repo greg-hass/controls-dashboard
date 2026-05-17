@@ -132,6 +132,23 @@ const enrichDevicesWithProfileNames = (deviceList: Device[], profileList: Profil
   });
 };
 
+let loadSequence = 0;
+
+const loadServicesByCategories = async (serviceCategories: ServiceCategory[]) => {
+  const results = await Promise.all(
+    serviceCategories.map(async (cat) => {
+      try {
+        const svcs = await api.getServicesByCategory(cat.PK);
+        return asArray<Service>(svcs.body);
+      } catch {
+        return [];
+      }
+    })
+  );
+
+  return results.flat();
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -178,6 +195,7 @@ export const useAppStore = create<AppState>()(
 
       // Data Loading
       loadAllData: async () => {
+        const currentLoad = ++loadSequence;
         set({ isLoading: true, error: null });
         try {
           const { settings } = get();
@@ -239,25 +257,20 @@ export const useAppStore = create<AppState>()(
           const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
           const networkStats = normalizeNetworkStats(netRes.body);
 
-          const allServices: Service[] = [];
-          for (const cat of serviceCategories) {
-            try {
-              const svcs = await api.getServicesByCategory(cat.PK);
-              allServices.push(...asArray<Service>(svcs.body));
-            } catch (e) {
-              // Some categories may be empty
-            }
-          }
-
           set({
             user: userRes.body,
             profiles,
             devices,
-            services: allServices,
             serviceCategories,
             ipInfo: ipRes.body,
             networkStats,
             isLoading: false,
+          });
+
+          void loadServicesByCategories(serviceCategories).then((allServices) => {
+            if (currentLoad === loadSequence) {
+              set({ services: allServices });
+            }
           });
         } catch (err) {
           set({
@@ -315,13 +328,7 @@ export const useAppStore = create<AppState>()(
         try {
           const categoriesRes = await api.getServiceCategories();
           const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
-          const allServices: Service[] = [];
-          for (const cat of serviceCategories) {
-            try {
-              const svcs = await api.getServicesByCategory(cat.PK);
-              allServices.push(...asArray<Service>(svcs.body));
-            } catch (e) { /* ignore */ }
-          }
+          const allServices = await loadServicesByCategories(serviceCategories);
           set({ services: allServices, serviceCategories });
         } catch (err) {
           set({ error: 'Failed to refresh services' });
