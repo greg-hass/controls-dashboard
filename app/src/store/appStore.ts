@@ -80,6 +80,18 @@ const normalizeApiBaseUrl = (url: string) => {
   return trimmed === 'https://api.controld.com' ? '/api' : trimmed;
 };
 
+const asArray = <T>(value: unknown): T[] => {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, T>);
+  }
+
+  return [];
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -179,11 +191,16 @@ export const useAppStore = create<AppState>()(
             api.getNetworkStats(),
           ]);
 
+          const profiles = asArray<Profile>(profilesRes.body);
+          const devices = asArray<Device>(devicesRes.body);
+          const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
+          const networkStats = asArray<NetworkStats>(netRes.body);
+
           const allServices: Service[] = [];
-          for (const cat of categoriesRes.body) {
+          for (const cat of serviceCategories) {
             try {
               const svcs = await api.getServicesByCategory(cat.PK);
-              allServices.push(...svcs.body);
+              allServices.push(...asArray<Service>(svcs.body));
             } catch (e) {
               // Some categories may be empty
             }
@@ -191,12 +208,12 @@ export const useAppStore = create<AppState>()(
 
           set({
             user: userRes.body,
-            profiles: profilesRes.body,
-            devices: devicesRes.body,
+            profiles,
+            devices,
             services: allServices,
-            serviceCategories: categoriesRes.body,
+            serviceCategories,
             ipInfo: ipRes.body,
-            networkStats: netRes.body,
+            networkStats,
             isLoading: false,
           });
         } catch (err) {
@@ -226,7 +243,7 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const res = await api.getProfiles();
-          set({ profiles: res.body });
+          set({ profiles: asArray<Profile>(res.body) });
         } catch (err) {
           set({ error: 'Failed to refresh profiles' });
         }
@@ -239,7 +256,7 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const res = await api.getDevices();
-          set({ devices: res.body });
+          set({ devices: asArray<Device>(res.body) });
         } catch (err) {
           set({ error: 'Failed to refresh devices' });
         }
@@ -252,14 +269,15 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const categoriesRes = await api.getServiceCategories();
+          const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
           const allServices: Service[] = [];
-          for (const cat of categoriesRes.body) {
+          for (const cat of serviceCategories) {
             try {
               const svcs = await api.getServicesByCategory(cat.PK);
-              allServices.push(...svcs.body);
+              allServices.push(...asArray<Service>(svcs.body));
             } catch (e) { /* ignore */ }
           }
-          set({ services: allServices, serviceCategories: categoriesRes.body });
+          set({ services: allServices, serviceCategories });
         } catch (err) {
           set({ error: 'Failed to refresh services' });
         }
@@ -275,7 +293,10 @@ export const useAppStore = create<AppState>()(
             api.getCustomRules(profileId),
             api.getRuleFolders(profileId),
           ]);
-          set({ customRules: rulesRes.body, ruleFolders: foldersRes.body });
+          set({
+            customRules: asArray<CustomRule>(rulesRes.body),
+            ruleFolders: asArray<RuleFolder>(foldersRes.body),
+          });
         } catch (err) {
           set({ error: 'Failed to refresh rules' });
         }
