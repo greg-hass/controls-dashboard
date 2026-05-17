@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import {
   Users,
@@ -10,6 +10,10 @@ import {
   Check,
   Search,
   SlidersHorizontal,
+  ArrowRightLeft,
+  Lock,
+  Unlock,
+  CircleDot,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,11 +26,19 @@ import type { Service, Filter } from '@/types/controld';
 
 const toSearchableText = (value: unknown) => String(value ?? '').toLowerCase();
 
+const SERVICE_STATUS_LABELS: Record<number, { label: string; color: string; icon: typeof Ban }> = {
+  0: { label: 'Blocked', color: 'text-red-500', icon: Ban },
+  1: { label: 'Allowed', color: 'text-emerald-500', icon: Check },
+  2: { label: 'Bypass', color: 'text-amber-500', icon: Unlock },
+};
+
 export function Profiles() {
   const profiles = useAppStore((state) => state.profiles);
   const services = useAppStore((state) => state.services);
+  const profileServices = useAppStore((state) => state.profileServices);
   const filters = useAppStore((state) => state.filters);
   const devices = useAppStore((state) => state.devices);
+  const loadProfileServices = useAppStore((state) => state.loadProfileServices);
   const updateProfileServices = useAppStore((state) => state.updateProfileServices);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,28 +47,48 @@ export function Profiles() {
   const profile = profiles.find((p) => p.PK === selectedProfile);
   const profileDevices = devices.filter((d) => d.profile === selectedProfile);
 
-  const filteredServices = services.filter((s: Service) =>
-    toSearchableText(s.name).includes(searchQuery.toLowerCase()) ||
-    toSearchableText(s.category).includes(searchQuery.toLowerCase())
+  // Load per-profile services when selection changes
+  useEffect(() => {
+    if (selectedProfile) {
+      loadProfileServices(selectedProfile);
+    }
+  }, [selectedProfile, loadProfileServices]);
+
+  // Use per-profile services if available, otherwise fall back to global catalog
+  const currentProfileServices = selectedProfile
+    ? profileServices[selectedProfile] ?? services
+    : services;
+
+  const filteredServices = currentProfileServices.filter(
+    (s: Service) =>
+      toSearchableText(s.name).includes(searchQuery.toLowerCase()) ||
+      toSearchableText(s.category).includes(searchQuery.toLowerCase())
   );
 
-  const filteredFilters = filters.filter((f: Filter) =>
-    toSearchableText(f.name).includes(searchQuery.toLowerCase()) ||
-    toSearchableText(f.category).includes(searchQuery.toLowerCase())
+  const filteredFilters = filters.filter(
+    (f: Filter) =>
+      toSearchableText(f.name).includes(searchQuery.toLowerCase()) ||
+      toSearchableText(f.category).includes(searchQuery.toLowerCase())
   );
 
   // Group services by category
-  const servicesByCategory = filteredServices.reduce((acc: Record<string, Service[]>, s: Service) => {
-    if (!acc[s.category]) acc[s.category] = [];
-    acc[s.category].push(s);
-    return acc;
-  }, {});
+  const servicesByCategory = filteredServices.reduce(
+    (acc: Record<string, Service[]>, s: Service) => {
+      if (!acc[s.category]) acc[s.category] = [];
+      acc[s.category].push(s);
+      return acc;
+    },
+    {}
+  );
 
   const handleServiceToggle = (serviceId: string, currentStatus: number) => {
     if (!selectedProfile) return;
-    const newStatus = currentStatus === 0 ? 1 : 0;
+    // Cycle through: blocked (0) -> allowed (1) -> bypass (2) -> blocked (0)
+    const newStatus = currentStatus === 0 ? 1 : currentStatus === 1 ? 2 : 0;
     updateProfileServices(selectedProfile, serviceId, newStatus);
   };
+
+  const blockedCount = currentProfileServices.filter((s: Service) => s.status === 0).length;
 
   return (
     <div className="space-y-6">
@@ -88,14 +120,20 @@ export function Profiles() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={cn(
-                      'w-10 h-10 rounded-lg flex items-center justify-center',
-                      selectedProfile === p.PK ? 'bg-primary' : 'bg-secondary'
-                    )}>
-                      <Users className={cn(
-                        'w-5 h-5',
-                        selectedProfile === p.PK ? 'text-primary-foreground' : 'text-muted-foreground'
-                      )} />
+                    <div
+                      className={cn(
+                        'w-10 h-10 rounded-lg flex items-center justify-center',
+                        selectedProfile === p.PK ? 'bg-primary' : 'bg-secondary'
+                      )}
+                    >
+                      <Users
+                        className={cn(
+                          'w-5 h-5',
+                          selectedProfile === p.PK
+                            ? 'text-primary-foreground'
+                            : 'text-muted-foreground'
+                        )}
+                      />
                     </div>
                     <div>
                       <p className="font-medium text-sm">{p.name}</p>
@@ -104,10 +142,14 @@ export function Profiles() {
                       </p>
                     </div>
                   </div>
-                  <ChevronRight className={cn(
-                    'w-4 h-4 transition-transform',
-                    selectedProfile === p.PK ? 'rotate-90 text-primary' : 'text-muted-foreground'
-                  )} />
+                  <ChevronRight
+                    className={cn(
+                      'w-4 h-4 transition-transform',
+                      selectedProfile === p.PK
+                        ? 'rotate-90 text-primary'
+                        : 'text-muted-foreground'
+                    )}
+                  />
                 </div>
 
                 <div className="flex items-center gap-2 mt-3">
@@ -115,7 +157,7 @@ export function Profiles() {
                     {devices.filter((d) => d.profile === p.PK).length} devices
                   </Badge>
                   <Badge variant="outline" className="text-xs">
-                    {services.filter((s: Service) => s.status === 0).length} blocked
+                    {blockedCount} blocked
                   </Badge>
                 </div>
               </CardContent>
@@ -143,6 +185,37 @@ export function Profiles() {
               </CardHeader>
 
               <CardContent className="space-y-6">
+                {/* Default Rule */}
+                {profile.default_rule && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
+                    <CircleDot className="w-4 h-4 text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">Default Rule</p>
+                      <p className="text-xs text-muted-foreground capitalize">
+                        {profile.default_rule.action} — applies when no specific rule matches
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Profile Policies */}
+                {profile.policies && (
+                  <div className="flex flex-wrap gap-2">
+                    {profile.policies.block_bypass === 1 && (
+                      <Badge variant="secondary" className="text-xs">
+                        <Lock className="w-3 h-3 mr-1" />
+                        Bypass Blocked
+                      </Badge>
+                    )}
+                    {profile.policies.safesearch === 1 && (
+                      <Badge variant="secondary" className="text-xs">
+                        <Search className="w-3 h-3 mr-1" />
+                        Safe Search
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
                 {/* Device assignment */}
                 <div>
                   <h4 className="text-sm font-medium mb-2">Assigned Devices</h4>
@@ -194,32 +267,50 @@ export function Profiles() {
                               {category}
                             </h5>
                             <div className="grid grid-cols-2 gap-2">
-                              {svcs.map((service) => (
-                                <div
-                                  key={service.PK}
-                                  className={cn(
-                                    'flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer',
-                                    service.status === 0
-                                      ? 'bg-red-500/5 border-red-500/20'
-                                      : 'bg-secondary/30 border-border hover:border-primary/30'
-                                  )}
-                                  onClick={() => handleServiceToggle(service.PK, service.status)}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    {service.status === 0 ? (
-                                      <Ban className="w-4 h-4 text-red-500" />
-                                    ) : (
-                                      <Check className="w-4 h-4 text-emerald-500" />
+                              {svcs.map((service) => {
+                                const statusMeta =
+                                  SERVICE_STATUS_LABELS[service.status] ??
+                                  SERVICE_STATUS_LABELS[1];
+                                const StatusIcon = statusMeta.icon;
+                                return (
+                                  <div
+                                    key={service.PK}
+                                    className={cn(
+                                      'flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer',
+                                      service.status === 0
+                                        ? 'bg-red-500/5 border-red-500/20'
+                                        : service.status === 2
+                                          ? 'bg-amber-500/5 border-amber-500/20'
+                                          : 'bg-secondary/30 border-border hover:border-primary/30'
                                     )}
-                                    <span className="text-sm">{service.name}</span>
+                                    onClick={() =>
+                                      handleServiceToggle(service.PK, service.status)
+                                    }
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <StatusIcon
+                                        className={cn('w-4 h-4', statusMeta.color)}
+                                      />
+                                      <div>
+                                        <span className="text-sm">{service.name}</span>
+                                        <p className={cn('text-[10px]', statusMeta.color)}>
+                                          {statusMeta.label}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      {service.status === 2 && (
+                                        <ArrowRightLeft className="w-3 h-3 text-amber-500" />
+                                      )}
+                                      <Switch
+                                        checked={service.status !== 0}
+                                        onCheckedChange={() => {}}
+                                        className="pointer-events-none"
+                                      />
+                                    </div>
                                   </div>
-                                  <Switch
-                                    checked={service.status !== 0}
-                                    onCheckedChange={() => {}}
-                                    className="pointer-events-none"
-                                  />
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         ))}

@@ -36,6 +36,7 @@ interface AppState {
   profiles: Profile[];
   devices: Device[];
   services: Service[];
+  profileServices: Record<string, Service[]>;
   serviceCategories: ServiceCategory[];
   filters: Filter[];
   customRules: CustomRule[];
@@ -65,6 +66,7 @@ interface AppState {
   refreshProfiles: () => Promise<void>;
   refreshDevices: () => Promise<void>;
   refreshServices: () => Promise<void>;
+  loadProfileServices: (profileId: string) => Promise<void>;
   refreshRules: (profileId: string) => Promise<void>;
   loadDeviceSchedules: () => Promise<void>;
   syncSchedulerToken: () => Promise<void>;
@@ -126,6 +128,16 @@ const normalizeNetworkStats = (value: unknown): NetworkStats[] =>
     }))
     .filter((item) => item.pop !== 'unknown');
 
+// API sometimes returns fields as objects {PK, name, updated} instead of strings.
+// For ID fields (profile, etc.) we need the PK; for display fields (type) we need the name.
+const normalizeIdOrObject = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return (value as Record<string, unknown>).PK as string || '';
+  }
+  return '';
+};
+
 const normalizeStringOrObject = (value: unknown): string => {
   if (typeof value === 'string') return value;
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -139,8 +151,7 @@ const enrichDevicesWithProfileNames = (deviceList: Device[], profileList: Profil
   const profileByName = new Map(profileList.map((profile) => [profile.name, profile.name]));
 
   return deviceList.map((device) => {
-    // API sometimes returns profile/type as objects {PK, name, updated} instead of strings
-    const profileId = normalizeStringOrObject(device.profile);
+    const profileId = normalizeIdOrObject(device.profile);
     const profileName =
       normalizeStringOrObject(device.profile_name) ||
       profileById.get(profileId) ||
@@ -206,6 +217,7 @@ export const useAppStore = create<AppState>()(
       profiles: [],
       devices: [],
       services: [],
+      profileServices: {},
       serviceCategories: [],
       filters: [],
       customRules: [],
@@ -369,6 +381,42 @@ export const useAppStore = create<AppState>()(
           set({ services: allServices, serviceCategories });
         } catch (err) {
           set({ error: 'Failed to refresh services' });
+        }
+      },
+
+      loadProfileServices: async (profileId: string) => {
+        if (get().settings.demoMode) {
+          // In demo mode, assign mock services with varied statuses per profile
+          const demoStatuses: Record<string, number> = {
+            prof_001: 0, // Strict Family: block most
+            prof_002: 1, // Standard: allow most
+            prof_003: 1, // Guest: allow all
+            prof_004: 0, // Homework: block most
+          };
+          const status = demoStatuses[profileId] ?? 1;
+          set((state) => ({
+            profileServices: {
+              ...state.profileServices,
+              [profileId]: mock.mockServices.map((s) => ({
+                ...s,
+                status: s.category === 'social' || s.category === 'gaming'
+                  ? (profileId === 'prof_002' ? s.status : status)
+                  : s.status,
+              })),
+            },
+          }));
+          return;
+        }
+        try {
+          const res = await api.getProfileServices(profileId);
+          set((state) => ({
+            profileServices: {
+              ...state.profileServices,
+              [profileId]: asArray<Service>(res.body),
+            },
+          }));
+        } catch (err) {
+          set({ error: 'Failed to load profile services' });
         }
       },
 
