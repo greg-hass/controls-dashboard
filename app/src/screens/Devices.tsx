@@ -90,11 +90,20 @@ export function Devices() {
     }
   };
 
-  // Real-time connectivity: online if last_activity within last 5 minutes
+  // Real-time connectivity: online if last_activity within last 5 minutes.
+  // Control D API returns last_activity as a Unix timestamp. It may be in
+  // seconds or milliseconds depending on the endpoint/version.
   const isDeviceOnline = (device: Device) => {
     if (!device.last_activity) return false;
-    const minutesSinceActivity = (Date.now() / 1000 - device.last_activity) / 60;
-    return minutesSinceActivity < 5;
+    const nowSec = Date.now() / 1000;
+    let lastSec = device.last_activity;
+    // If the timestamp is in milliseconds (way larger than current seconds),
+    // convert it to seconds.
+    if (lastSec > nowSec * 10) {
+      lastSec = lastSec / 1000;
+    }
+    const minutesSinceActivity = (nowSec - lastSec) / 60;
+    return minutesSinceActivity >= 0 && minutesSinceActivity < 5;
   };
 
   const formatRemaining = (expiresAt?: number) => {

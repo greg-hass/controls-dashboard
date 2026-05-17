@@ -320,9 +320,15 @@ export function Overview() {
                 >
                   <div className="flex items-center gap-3">
                     {(() => {
+                      const nowSec = Date.now() / 1000;
+                      let lastSec = device.last_activity ?? 0;
+                      // Handle milliseconds timestamp from API
+                      if (lastSec > nowSec * 10) {
+                        lastSec = lastSec / 1000;
+                      }
                       const online =
                         device.last_activity &&
-                        (Date.now() / 1000 - device.last_activity) / 60 < 5;
+                        (nowSec - lastSec) / 60 < 5;
                       return (
                         <div
                           className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-red-500'}`}
