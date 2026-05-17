@@ -138,9 +138,16 @@ const enrichDevicesWithProfileNames = (deviceList: Device[], profileList: Profil
       device.profile ||
       '';
 
+    // API sometimes returns type as an object {PK, name, updated} instead of a string
+    const typeValue =
+      typeof device.type === 'string'
+        ? device.type
+        : (device.type as unknown as { name?: string })?.name || '';
+
     return {
       ...device,
       profile_name: profileName,
+      type: typeValue,
     };
   });
 };
