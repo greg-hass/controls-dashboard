@@ -319,11 +319,17 @@ export function Overview() {
                   className="flex items-center justify-between p-3 rounded-lg bg-secondary/30"
                 >
                   <div className="flex items-center gap-3">
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        device.status === 1 ? 'bg-emerald-500' : 'bg-red-500'
-                      }`}
-                    />
+                    {(() => {
+                      const statusColor =
+                        device.status === 0
+                          ? 'bg-slate-400'
+                          : device.status === 1
+                            ? 'bg-emerald-500'
+                            : device.status === 2
+                              ? 'bg-amber-500'
+                              : 'bg-red-500';
+                      return <div className={`w-2 h-2 rounded-full ${statusColor}`} />;
+                    })()}
                     <div>
                       <p className="text-sm font-medium">{device.name}</p>
                       <p className="text-xs text-muted-foreground">

@@ -70,10 +70,24 @@ export function Devices() {
     return type === 'router' ? Router : Smartphone;
   };
 
-  const getStatusColor = (status: number) => {
-    if (status === 2) return 'bg-amber-500';
-    if (status === 3) return 'bg-red-500';
-    return status === 1 ? 'bg-emerald-500' : 'bg-red-500';
+  const getStatusMeta = (status: number) => {
+    // Control D device statuses:
+    // 0 = Unused (never configured)
+    // 1 = Active (configured and used)
+    // 2 = Profile not enforced (bypass mode)
+    // 3 = Disabled (hard disabled)
+    switch (status) {
+      case 0:
+        return { color: 'bg-slate-400', label: 'Unused', textColor: 'text-slate-400' };
+      case 1:
+        return { color: 'bg-emerald-500', label: 'Active', textColor: 'text-emerald-500' };
+      case 2:
+        return { color: 'bg-amber-500', label: 'Bypass', textColor: 'text-amber-500' };
+      case 3:
+        return { color: 'bg-red-500', label: 'Disabled', textColor: 'text-red-500' };
+      default:
+        return { color: 'bg-slate-400', label: 'Unknown', textColor: 'text-slate-400' };
+    }
   };
 
   const formatRemaining = (expiresAt?: number) => {
@@ -182,22 +196,29 @@ export function Devices() {
                     <div>
                       <h3 className="font-medium text-sm">{device.name}</h3>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(device.status))} />
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {device.status === 1 ? 'Online' : 'Offline'}
-                        </span>
+                        {(() => {
+                          const meta = getStatusMeta(device.status);
+                          return (
+                            <>
+                              <div className={cn('w-1.5 h-1.5 rounded-full', meta.color)} />
+                              <span className={cn('text-xs capitalize', meta.textColor)}>
+                                {meta.label}
+                              </span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {device.status === 2 && (
                       <Badge variant="secondary" className="text-amber-500 border-amber-500/20">
-                        DNS paused
+                        Bypass mode
                       </Badge>
                     )}
                     {device.status === 3 && (
                       <Badge variant="destructive" className="text-xs">
-                        Hard disabled
+                        Disabled
                       </Badge>
                     )}
                     <Badge variant="outline" className="text-xs capitalize">
@@ -212,10 +233,10 @@ export function Devices() {
                       <DropdownMenuContent align="end" className="w-56">
                         <DropdownMenuLabel>Device actions</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        {device.status === 2 ? (
+                        {device.status === 3 ? (
                           <DropdownMenuItem onSelect={() => handleRestore(device.PK, device.name)}>
                             <RefreshCcw className="w-4 h-4" />
-                            Restore DNS now
+                            Enable device
                           </DropdownMenuItem>
                         ) : (
                           disableDurations.map((minutes) => (
@@ -224,7 +245,7 @@ export function Devices() {
                               onSelect={() => handleTempDisable(device.PK, device.name, minutes)}
                             >
                               <Ban className="w-4 h-4" />
-                              Soft disable for {minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}
+                              Disable for {minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}
                             </DropdownMenuItem>
                           ))
                         )}
