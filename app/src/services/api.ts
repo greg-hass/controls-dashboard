@@ -18,6 +18,61 @@ import type {
   ApiResponse,
 } from '@/types/controld';
 
+type ControlDFormValue = string | number | boolean | null | undefined;
+type ControlDFormPayload = Record<string, ControlDFormValue | ControlDFormValue[]>;
+
+export const buildControlDFormBody = (payload: ControlDFormPayload) => {
+  const body = new URLSearchParams();
+
+  Object.entries(payload).forEach(([key, value]) => {
+    const values = Array.isArray(value) ? value : [value];
+    values.forEach((item) => {
+      if (item !== undefined && item !== null && item !== '') {
+        body.append(key, String(item));
+      }
+    });
+  });
+
+  return body;
+};
+
+export const toControlDServiceRulePayload = (status: number) => {
+  if (status === 0) {
+    return { do: 0, status: 1 };
+  }
+
+  if (status === 2) {
+    return { do: 1, status: 1 };
+  }
+
+  return { do: 0, status: 0 };
+};
+
+export const toControlDDevicePayload = (device: Partial<Device>) => {
+  const payload: ControlDFormPayload = {};
+
+  if (device.name !== undefined) payload.name = device.name;
+  if (device.clients !== undefined) payload.client_count = device.clients;
+  if (device.profile !== undefined) payload.profile_id = device.profile;
+  if (device.status !== undefined) payload.status = device.status;
+
+  return payload;
+};
+
+const customRuleActionToDo = (rule: Partial<CustomRule>) => {
+  if (rule.action === 'block') return 0;
+  if (rule.action === 'allow' || rule.action === 'bypass') return 1;
+  return 2;
+};
+
+export const toControlDCustomRulePayload = (rule: Partial<CustomRule>) => ({
+  do: customRuleActionToDo(rule),
+  status: rule.status ?? 1,
+  via: rule.value,
+  group: rule.group,
+  'hostnames[]': rule.hostname,
+});
+
 class ControlDApi {
   private token: string = '';
   private baseUrl: string = '/api';
@@ -40,14 +95,19 @@ class ControlDApi {
     }
 
     const url = `${this.baseUrl}${endpoint}`;
+    const isFormBody = options.body instanceof URLSearchParams;
+    const headers = new Headers(options.headers);
+    headers.set('Authorization', `Bearer ${this.token}`);
+    headers.set('Accept', 'application/json');
+    if (isFormBody) {
+      headers.set('Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8');
+    } else if (!headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     let data: {
@@ -129,14 +189,14 @@ class ControlDApi {
   async updateFilter(pk: string, filter: string, status: number): Promise<ApiResponse<unknown>> {
     return this.request<ApiResponse<unknown>>(`/profiles/${pk}/filters/filter/${filter}`, {
       method: 'PUT',
-      body: JSON.stringify({ status }),
+      body: buildControlDFormBody({ status }),
     });
   }
 
   async batchUpdateFilters(pk: string, filters: Record<string, number>): Promise<ApiResponse<unknown>> {
     return this.request<ApiResponse<unknown>>(`/profiles/${pk}/filters`, {
       method: 'PUT',
-      body: JSON.stringify({ filters }),
+      body: buildControlDFormBody(filters),
     });
   }
 
@@ -156,7 +216,7 @@ class ControlDApi {
   async updateService(pk: string, service: string, status: number): Promise<ApiResponse<unknown>> {
     return this.request<ApiResponse<unknown>>(`/profiles/${pk}/services/${service}`, {
       method: 'PUT',
-      body: JSON.stringify({ status }),
+      body: buildControlDFormBody(toControlDServiceRulePayload(status)),
     });
   }
 
@@ -171,19 +231,19 @@ class ControlDApi {
   async createCustomRule(pk: string, rule: Partial<CustomRule>): Promise<ApiResponse<CustomRule>> {
     return this.request<ApiResponse<CustomRule>>(`/profiles/${pk}/rules`, {
       method: 'POST',
-      body: JSON.stringify(rule),
+      body: buildControlDFormBody(toControlDCustomRulePayload(rule)),
     });
   }
 
   async updateCustomRule(pk: string, rule: Partial<CustomRule>): Promise<ApiResponse<CustomRule>> {
     return this.request<ApiResponse<CustomRule>>(`/profiles/${pk}/rules`, {
       method: 'PUT',
-      body: JSON.stringify(rule),
+      body: buildControlDFormBody(toControlDCustomRulePayload(rule)),
     });
   }
 
   async deleteCustomRule(pk: string, hostname: string): Promise<ApiResponse<void>> {
-    return this.request<ApiResponse<void>>(`/profiles/${pk}/rules/${hostname}`, {
+    return this.request<ApiResponse<void>>(`/profiles/${pk}/rules/${encodeURIComponent(hostname)}`, {
       method: 'DELETE',
     });
   }
@@ -237,14 +297,14 @@ class ControlDApi {
   async createDevice(device: Partial<Device>): Promise<ApiResponse<Device>> {
     return this.request<ApiResponse<Device>>('/devices', {
       method: 'POST',
-      body: JSON.stringify(device),
+      body: buildControlDFormBody(toControlDDevicePayload(device)),
     });
   }
 
   async updateDevice(pk: string, device: Partial<Device>): Promise<ApiResponse<Device>> {
     return this.request<ApiResponse<Device>>(`/devices/${pk}`, {
       method: 'PUT',
-      body: JSON.stringify(device),
+      body: buildControlDFormBody(toControlDDevicePayload(device)),
     });
   }
 

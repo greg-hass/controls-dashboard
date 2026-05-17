@@ -67,6 +67,7 @@ interface AppState {
   refreshDevices: () => Promise<void>;
   refreshServices: () => Promise<void>;
   loadProfileServices: (profileId: string) => Promise<void>;
+  loadProfileFilters: (profileId: string) => Promise<void>;
   refreshRules: (profileId: string) => Promise<void>;
   loadDeviceSchedules: () => Promise<void>;
   syncSchedulerToken: () => Promise<void>;
@@ -194,6 +195,55 @@ const loadServicesByCategories = async (serviceCategories: ServiceCategory[]) =>
   );
 
   return results.flat();
+};
+
+const toAppServiceStatus = (service: Service) => {
+  if (service.status === 0) return 1;
+  if (service.do === 0) return 0;
+  if (service.do === 1) return 2;
+  return service.status ?? 1;
+};
+
+const mergeProfileServiceRules = (catalog: Service[], rules: Service[]) => {
+  const rulesById = new Map(rules.map((service) => [service.PK, service]));
+
+  return catalog.map((service) => {
+    const rule = rulesById.get(service.PK);
+    if (!rule) {
+      return { ...service, status: 1 };
+    }
+
+    return {
+      ...service,
+      ...rule,
+      name: rule.name ?? service.name,
+      category: rule.category ?? service.category,
+      status: toAppServiceStatus(rule),
+    };
+  });
+};
+
+const toAppRuleAction = (rule: CustomRule): CustomRule['action'] => {
+  if (rule.action) return rule.action;
+  if (rule.do === 0) return 'block';
+  if (rule.do === 1) return 'allow';
+  return 'redirect';
+};
+
+const normalizeCustomRules = (rules: CustomRule[]) =>
+  rules.map((rule) => ({
+    ...rule,
+    action: toAppRuleAction(rule),
+    value: rule.value ?? rule.via,
+  }));
+
+const withoutDeviceSuspension = (
+  suspensions: Record<string, DeviceSchedule>,
+  deviceId: string
+) => {
+  const next = { ...suspensions };
+  delete next[deviceId];
+  return next;
 };
 
 export const useAppStore = create<AppState>()(
@@ -349,7 +399,7 @@ export const useAppStore = create<AppState>()(
         try {
           const res = await api.getProfiles();
           set({ profiles: asArray<Profile>(res.body) });
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to refresh profiles' });
         }
       },
@@ -364,7 +414,7 @@ export const useAppStore = create<AppState>()(
           set((state) => ({
             devices: enrichDevicesWithProfileNames(asArray<Device>(res.body), state.profiles),
           }));
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to refresh devices' });
         }
       },
@@ -379,7 +429,7 @@ export const useAppStore = create<AppState>()(
           const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
           const allServices = await loadServicesByCategories(serviceCategories);
           set({ services: allServices, serviceCategories });
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to refresh services' });
         }
       },
@@ -412,11 +462,24 @@ export const useAppStore = create<AppState>()(
           set((state) => ({
             profileServices: {
               ...state.profileServices,
-              [profileId]: asArray<Service>(res.body),
+              [profileId]: mergeProfileServiceRules(state.services, asArray<Service>(res.body)),
             },
           }));
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to load profile services' });
+        }
+      },
+
+      loadProfileFilters: async (profileId: string) => {
+        if (get().settings.demoMode) {
+          set({ filters: mock.mockFilters });
+          return;
+        }
+        try {
+          const res = await api.getNativeFilters(profileId);
+          set({ filters: asArray<Filter>(res.body) });
+        } catch {
+          set({ error: 'Failed to load profile filters' });
         }
       },
 
@@ -431,10 +494,10 @@ export const useAppStore = create<AppState>()(
             api.getRuleFolders(profileId),
           ]);
           set({
-            customRules: asArray<CustomRule>(rulesRes.body),
+            customRules: normalizeCustomRules(asArray<CustomRule>(rulesRes.body)),
             ruleFolders: asArray<RuleFolder>(foldersRes.body),
           });
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to refresh rules' });
         }
       },
@@ -454,7 +517,7 @@ export const useAppStore = create<AppState>()(
               schedules.map((schedule) => [schedule.deviceId, schedule])
             ),
           });
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to load device schedules' });
         }
       },
@@ -463,7 +526,7 @@ export const useAppStore = create<AppState>()(
         const { settings } = get();
         try {
           await syncSchedulerTokenApi(settings.demoMode ? '' : settings.apiToken);
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to sync scheduler token' });
         }
       },
@@ -480,8 +543,18 @@ export const useAppStore = create<AppState>()(
         }
         try {
           await api.updateService(profileId, serviceId, status);
-          await get().refreshServices();
-        } catch (err) {
+          set((state) => ({
+            services: state.services.map((service) =>
+              service.PK === serviceId ? { ...service, status } : service
+            ),
+            profileServices: {
+              ...state.profileServices,
+              [profileId]: (state.profileServices[profileId] ?? state.services).map((service) =>
+                service.PK === serviceId ? { ...service, status } : service
+              ),
+            },
+          }));
+        } catch {
           set({ error: 'Failed to update service' });
         }
       },
@@ -497,7 +570,12 @@ export const useAppStore = create<AppState>()(
         }
         try {
           await api.updateFilter(profileId, filterId, status);
-        } catch (err) {
+          set((state) => ({
+            filters: state.filters.map((filter) =>
+              filter.PK === filterId ? { ...filter, status } : filter
+            ),
+          }));
+        } catch {
           set({ error: 'Failed to update filter' });
         }
       },
@@ -517,7 +595,7 @@ export const useAppStore = create<AppState>()(
         try {
           await api.updateDevice(deviceId, { profile: profileId });
           await get().refreshDevices();
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to update device' });
         }
       },
@@ -597,8 +675,7 @@ export const useAppStore = create<AppState>()(
           await get().updateDeviceStatus(deviceId, restoreStatus);
 
           set((state) => {
-            const { [deviceId]: _removed, ...rest } = state.deviceSuspensions;
-            return { deviceSuspensions: rest };
+            return { deviceSuspensions: withoutDeviceSuspension(state.deviceSuspensions, deviceId) };
           });
           return;
         }
@@ -606,8 +683,7 @@ export const useAppStore = create<AppState>()(
         await restoreDevicePause({ deviceId, restoreStatus });
 
         set((state) => {
-          const { [deviceId]: _removed, ...rest } = state.deviceSuspensions;
-          return { deviceSuspensions: rest };
+          return { deviceSuspensions: withoutDeviceSuspension(state.deviceSuspensions, deviceId) };
         });
         await get().refreshDevices();
       },
@@ -625,7 +701,7 @@ export const useAppStore = create<AppState>()(
         try {
           await api.createCustomRule(profileId, rule);
           await get().refreshRules(profileId);
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to create rule' });
         }
       },
@@ -640,7 +716,7 @@ export const useAppStore = create<AppState>()(
         try {
           await api.deleteCustomRule(profileId, hostname);
           await get().refreshRules(profileId);
-        } catch (err) {
+        } catch {
           set({ error: 'Failed to delete rule' });
         }
       },

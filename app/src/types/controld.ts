@@ -55,7 +55,10 @@ export interface Service {
   PK: string;
   name: string;
   category: string;
-  status: number; // 0 = blocked, 1 = allowed, 2 = bypass
+  status: number; // app view: 0 = blocked, 1 = allowed/no rule, 2 = bypass
+  do?: number; // Control D API rule type: 0 = block, 1 = bypass, 2 = spoof, 3 = redirect
+  via?: string;
+  via_v6?: string;
 }
 
 export interface ServiceCategory {
@@ -69,7 +72,10 @@ export interface CustomRule {
   PK: string;
   hostname: string;
   action: 'block' | 'allow' | 'bypass' | 'redirect';
+  do?: number;
   value?: string; // for redirect
+  via?: string;
+  via_v6?: string;
   group?: string;
   status: number;
 }

@@ -39,7 +39,9 @@ export function Profiles() {
   const filters = useAppStore((state) => state.filters);
   const devices = useAppStore((state) => state.devices);
   const loadProfileServices = useAppStore((state) => state.loadProfileServices);
+  const loadProfileFilters = useAppStore((state) => state.loadProfileFilters);
   const updateProfileServices = useAppStore((state) => state.updateProfileServices);
+  const updateFilter = useAppStore((state) => state.updateFilter);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('services');
@@ -51,8 +53,9 @@ export function Profiles() {
   useEffect(() => {
     if (selectedProfile) {
       loadProfileServices(selectedProfile);
+      loadProfileFilters(selectedProfile);
     }
-  }, [selectedProfile, loadProfileServices]);
+  }, [selectedProfile, loadProfileFilters, loadProfileServices, services.length]);
 
   // Use per-profile services if available, otherwise fall back to global catalog
   const currentProfileServices = selectedProfile
@@ -86,6 +89,11 @@ export function Profiles() {
     // Cycle through: blocked (0) -> allowed (1) -> bypass (2) -> blocked (0)
     const newStatus = currentStatus === 0 ? 1 : currentStatus === 1 ? 2 : 0;
     updateProfileServices(selectedProfile, serviceId, newStatus);
+  };
+
+  const handleFilterToggle = (filterId: string, currentStatus: number) => {
+    if (!selectedProfile) return;
+    updateFilter(selectedProfile, filterId, currentStatus === 1 ? 0 : 1);
   };
 
   const blockedCount = currentProfileServices.filter((s: Service) => s.status === 0).length;
@@ -345,7 +353,7 @@ export function Profiles() {
                             </div>
                             <Switch
                               checked={filter.status === 1}
-                              onCheckedChange={() => {}}
+                              onCheckedChange={() => handleFilterToggle(filter.PK, filter.status)}
                             />
                           </div>
                         ))}

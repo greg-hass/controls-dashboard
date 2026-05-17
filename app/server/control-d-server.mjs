@@ -49,6 +49,16 @@ const readJson = async (req) => {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 };
 
+const buildFormBody = (body) => {
+  const params = new URLSearchParams();
+  Object.entries(body).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, String(value));
+    }
+  });
+  return params;
+};
+
 const send = (res, statusCode, body, headers = {}) => {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -93,9 +103,9 @@ const callControlD = async (deviceId, body) => {
     headers: {
       Authorization: `Bearer ${state.apiToken}`,
       Accept: 'application/json',
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
     },
-    body: JSON.stringify(body),
+    body: buildFormBody(body),
   });
 
   let data = null;

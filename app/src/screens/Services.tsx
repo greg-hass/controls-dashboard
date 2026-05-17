@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import {
   Search,
@@ -53,14 +53,25 @@ const toSearchableText = (value: unknown) => String(value ?? '').toLowerCase();
 
 export function Services() {
   const services = useAppStore((state) => state.services);
+  const profileServices = useAppStore((state) => state.profileServices);
   const serviceCategories = useAppStore((state) => state.serviceCategories);
   const profiles = useAppStore((state) => state.profiles);
+  const loadProfileServices = useAppStore((state) => state.loadProfileServices);
   const updateProfileServices = useAppStore((state) => state.updateProfileServices);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProfile, setSelectedProfile] = useState<string>(profiles[0]?.PK || '');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const currentServices = selectedProfile
+    ? profileServices[selectedProfile] ?? services
+    : services;
 
-  const filteredServices = services.filter((s: Service) => {
+  useEffect(() => {
+    if (selectedProfile) {
+      loadProfileServices(selectedProfile);
+    }
+  }, [loadProfileServices, selectedProfile, services.length]);
+
+  const filteredServices = currentServices.filter((s: Service) => {
     const matchesSearch = toSearchableText(s.name).includes(searchQuery.toLowerCase());
     const matchesCategory = activeCategory === 'all' || s.category === activeCategory;
     return matchesSearch && matchesCategory;
@@ -79,8 +90,8 @@ export function Services() {
   };
 
   // Stats
-  const totalBlocked = services.filter((s: Service) => s.status === 0).length;
-  const totalAllowed = services.filter((s: Service) => s.status === 1).length;
+  const totalBlocked = currentServices.filter((s: Service) => s.status === 0).length;
+  const totalAllowed = currentServices.filter((s: Service) => s.status === 1).length;
 
   return (
     <div className="space-y-6">
@@ -138,11 +149,11 @@ export function Services() {
         <ScrollArea className="w-full">
           <TabsList className="w-max flex-nowrap">
             <TabsTrigger value="all" className="text-xs">
-              All ({services.length})
+              All ({currentServices.length})
             </TabsTrigger>
             {serviceCategories.map((cat: ServiceCategory) => (
               <TabsTrigger key={cat.PK} value={cat.PK} className="text-xs">
-                {String(cat.name ?? cat.PK)} ({services.filter((s: Service) => s.category === cat.PK).length})
+                {String(cat.name ?? cat.PK)} ({currentServices.filter((s: Service) => s.category === cat.PK).length})
               </TabsTrigger>
             ))}
           </TabsList>
