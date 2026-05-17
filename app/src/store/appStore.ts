@@ -86,11 +86,32 @@ const asArray = <T>(value: unknown): T[] => {
   }
 
   if (value && typeof value === 'object') {
-    return Object.values(value as Record<string, T>);
+    return Object.values(value as Record<string, unknown>).flatMap((item) =>
+      Array.isArray(item) ? item : [item]
+    ) as T[];
   }
 
   return [];
 };
+
+const hasObjectValue = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const normalizeNetworkStats = (value: unknown): NetworkStats[] =>
+  asArray<Record<string, unknown>>(value)
+    .filter(hasObjectValue)
+    .map((item) => ({
+      pop: String(item.pop ?? item.PK ?? item.id ?? 'unknown'),
+      location: String(item.location ?? item.name ?? item.pop ?? 'Unknown'),
+      latency: typeof item.latency === 'number' ? item.latency : undefined,
+      services: {
+        dns: Boolean(hasObjectValue(item.services) ? item.services.dns : item.dns),
+        doh: Boolean(hasObjectValue(item.services) ? item.services.doh : item.doh),
+        dot: Boolean(hasObjectValue(item.services) ? item.services.dot : item.dot),
+        proxy: Boolean(hasObjectValue(item.services) ? item.services.proxy : item.proxy),
+      },
+    }))
+    .filter((item) => item.pop !== 'unknown');
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -194,7 +215,7 @@ export const useAppStore = create<AppState>()(
           const profiles = asArray<Profile>(profilesRes.body);
           const devices = asArray<Device>(devicesRes.body);
           const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
-          const networkStats = asArray<NetworkStats>(netRes.body);
+          const networkStats = normalizeNetworkStats(netRes.body);
 
           const allServices: Service[] = [];
           for (const cat of serviceCategories) {

@@ -81,6 +81,7 @@ export function Overview() {
 
   // Current POP
   const currentPop = networkStats.find((n) => n.pop === ipInfo?.pop) || networkStats[0];
+  const currentPopServices = currentPop?.services ?? {};
 
   return (
     <div className="space-y-6">
@@ -373,7 +374,7 @@ export function Overview() {
                   <p className="text-xs text-muted-foreground">Latency</p>
                 </div>
                 <div className="flex gap-2">
-                  {Object.entries(currentPop.services).map(([service, available]) => (
+                  {Object.entries(currentPopServices).map(([service, available]) => (
                     <Badge
                       key={service}
                       variant={available ? 'default' : 'secondary'}

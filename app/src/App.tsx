@@ -11,6 +11,7 @@ import { QuickActions } from '@/screens/QuickActions';
 import { NetworkHealth } from '@/screens/NetworkHealth';
 import { Settings } from '@/screens/Settings';
 import { Toaster } from '@/components/ui/sonner';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import './App.css';
 
 function AppContent() {
@@ -47,10 +48,12 @@ function AppContent() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <AppContent />
-      <Toaster />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppContent />
+        <Toaster />
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

@@ -32,6 +32,8 @@ export function NetworkHealth() {
   // Sort by latency
   const sortedStats = [...networkStats].sort((a, b) => (a.latency || 999) - (b.latency || 999));
   const currentPop = networkStats.find((n) => n.pop === ipInfo?.pop);
+  const getServices = (pop: { services?: Partial<Record<'dns' | 'doh' | 'dot' | 'proxy', boolean>> }) =>
+    pop.services ?? {};
 
   // Chart data
   const latencyData = sortedStats.map((s) => ({
@@ -41,10 +43,10 @@ export function NetworkHealth() {
   }));
 
   const serviceAvailability = [
-    { name: 'DNS', available: networkStats.filter((n) => n.services.dns).length, total: networkStats.length },
-    { name: 'DoH', available: networkStats.filter((n) => n.services.doh).length, total: networkStats.length },
-    { name: 'DoT', available: networkStats.filter((n) => n.services.dot).length, total: networkStats.length },
-    { name: 'Proxy', available: networkStats.filter((n) => n.services.proxy).length, total: networkStats.length },
+    { name: 'DNS', available: networkStats.filter((n) => getServices(n).dns).length, total: networkStats.length },
+    { name: 'DoH', available: networkStats.filter((n) => getServices(n).doh).length, total: networkStats.length },
+    { name: 'DoT', available: networkStats.filter((n) => getServices(n).dot).length, total: networkStats.length },
+    { name: 'Proxy', available: networkStats.filter((n) => getServices(n).proxy).length, total: networkStats.length },
   ];
 
   return (
@@ -111,7 +113,7 @@ export function NetworkHealth() {
                       <p className="text-xs text-muted-foreground">Latency</p>
                     </div>
                     <div className="flex gap-2">
-                      {Object.entries(currentPop.services).map(([service, available]) => (
+                      {Object.entries(getServices(currentPop)).map(([service, available]) => (
                         <Badge
                           key={service}
                           variant={available ? 'default' : 'secondary'}
@@ -253,28 +255,28 @@ export function NetworkHealth() {
                     </td>
                     <td className="py-2.5 px-3 text-sm">{pop.location}</td>
                     <td className="py-2.5 px-3 text-center">
-                      {pop.services.dns ? (
+                      {getServices(pop).dns ? (
                         <Wifi className="w-4 h-4 text-emerald-500 mx-auto" />
                       ) : (
                         <WifiOff className="w-4 h-4 text-red-500 mx-auto" />
                       )}
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      {pop.services.doh ? (
+                      {getServices(pop).doh ? (
                         <Wifi className="w-4 h-4 text-emerald-500 mx-auto" />
                       ) : (
                         <WifiOff className="w-4 h-4 text-red-500 mx-auto" />
                       )}
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      {pop.services.dot ? (
+                      {getServices(pop).dot ? (
                         <Wifi className="w-4 h-4 text-emerald-500 mx-auto" />
                       ) : (
                         <WifiOff className="w-4 h-4 text-red-500 mx-auto" />
                       )}
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      {pop.services.proxy ? (
+                      {getServices(pop).proxy ? (
                         <Wifi className="w-4 h-4 text-emerald-500 mx-auto" />
                       ) : (
                         <WifiOff className="w-4 h-4 text-red-500 mx-auto" />
@@ -354,5 +356,4 @@ export function NetworkHealth() {
     </div>
   );
 }
-
 
