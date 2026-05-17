@@ -1,0 +1,12 @@
+services:
+  controls-dashboard:
+    image: ghcr.io/greg-hass/controls-dashboard:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: controls-dashboard
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    environment:
+      TZ: Europe/London
