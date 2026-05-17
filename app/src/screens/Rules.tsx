@@ -34,6 +34,8 @@ import {
 import { cn } from '@/lib/utils';
 import type { CustomRule, RuleFolder, Profile } from '@/types/controld';
 
+const toSearchableText = (value: unknown) => String(value ?? '').toLowerCase();
+
 export function Rules() {
   const customRules = useAppStore((state) => state.customRules);
   const ruleFolders = useAppStore((state) => state.ruleFolders);
@@ -50,8 +52,8 @@ export function Rules() {
   });
 
   const filteredRules = customRules.filter((r: CustomRule) =>
-    r.hostname.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.group?.toLowerCase().includes(searchQuery.toLowerCase())
+    toSearchableText(r.hostname).includes(searchQuery.toLowerCase()) ||
+    toSearchableText(r.group).includes(searchQuery.toLowerCase())
   );
 
   const rulesByFolder = filteredRules.reduce((acc: Record<string, CustomRule[]>, r: CustomRule) => {

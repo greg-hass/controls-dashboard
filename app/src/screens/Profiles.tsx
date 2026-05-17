@@ -20,6 +20,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { Service, Filter } from '@/types/controld';
 
+const toSearchableText = (value: unknown) => String(value ?? '').toLowerCase();
+
 export function Profiles() {
   const profiles = useAppStore((state) => state.profiles);
   const services = useAppStore((state) => state.services);
@@ -34,13 +36,13 @@ export function Profiles() {
   const profileDevices = devices.filter((d) => d.profile === selectedProfile);
 
   const filteredServices = services.filter((s: Service) =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.category.toLowerCase().includes(searchQuery.toLowerCase())
+    toSearchableText(s.name).includes(searchQuery.toLowerCase()) ||
+    toSearchableText(s.category).includes(searchQuery.toLowerCase())
   );
 
   const filteredFilters = filters.filter((f: Filter) =>
-    f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.category.toLowerCase().includes(searchQuery.toLowerCase())
+    toSearchableText(f.name).includes(searchQuery.toLowerCase()) ||
+    toSearchableText(f.category).includes(searchQuery.toLowerCase())
   );
 
   // Group services by category

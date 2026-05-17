@@ -25,6 +25,8 @@ import {
 import { cn } from '@/lib/utils';
 import type { Device } from '@/types/controld';
 
+const toSearchableText = (value: unknown) => String(value ?? '').toLowerCase();
+
 export function Devices() {
   const devices = useAppStore((state) => state.devices);
   const profiles = useAppStore((state) => state.profiles);
@@ -34,8 +36,8 @@ export function Devices() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const filteredDevices = devices.filter((d: Device) => {
-    const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.profile_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = toSearchableText(d.name).includes(searchQuery.toLowerCase()) ||
+      toSearchableText(d.profile_name).includes(searchQuery.toLowerCase());
     const matchesType = filterType === 'all' || d.type === filterType;
     return matchesSearch && matchesType;
   });
