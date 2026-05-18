@@ -18,7 +18,7 @@ describe('Control D API payloads', () => {
   });
 
   it('uses Control D device field names instead of app field names', () => {
-    expect(toControlDDevicePayload({ profile: 'prof_123', clients: 4, status: 2 })).toEqual({
+    expect(toControlDDevicePayload({ profile: 'prof_123', configured_clients: 4, status: 2 })).toEqual({
       profile_id: 'prof_123',
       client_count: 4,
       status: 2,

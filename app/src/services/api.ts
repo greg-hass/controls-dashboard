@@ -52,7 +52,8 @@ export const toControlDDevicePayload = (device: Partial<Device>) => {
   const payload: ControlDFormPayload = {};
 
   if (device.name !== undefined) payload.name = device.name;
-  if (device.clients !== undefined) payload.client_count = device.clients;
+  if (device.configured_clients !== undefined) payload.client_count = device.configured_clients;
+  if (device.client_count !== undefined) payload.client_count = device.client_count;
   if (device.profile !== undefined) payload.profile_id = device.profile;
   if (device.status !== undefined) payload.status = device.status;
 
@@ -326,14 +327,14 @@ class ControlDApi {
   async learnIP(deviceId: string, ip: string): Promise<ApiResponse<unknown>> {
     return this.request<ApiResponse<unknown>>('/access', {
       method: 'POST',
-      body: JSON.stringify({ device_id: deviceId, ip }),
+      body: buildControlDFormBody({ device_id: deviceId, 'ips[]': ip }),
     });
   }
 
   async deleteAccessIP(deviceId: string, ip: string): Promise<ApiResponse<void>> {
     return this.request<ApiResponse<void>>('/access', {
       method: 'DELETE',
-      body: JSON.stringify({ device_id: deviceId, ip }),
+      body: buildControlDFormBody({ device_id: deviceId, 'ips[]': ip }),
     });
   }
 

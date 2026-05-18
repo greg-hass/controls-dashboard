@@ -16,10 +16,11 @@ import type {
   QuickAction,
   AppSettings,
   DeviceSchedule,
+  AccessIP,
 } from '@/types/controld';
 import * as mock from '@/data/mock';
 import { api } from '@/services/api';
-import { normalizeControlDDevice } from '@/services/deviceStatus';
+import { normalizeControlDDevice, summarizeDeviceActivity } from '@/services/deviceStatus';
 import {
   loadSchedulerState,
   restoreDevicePause,
@@ -97,7 +98,7 @@ const normalizeApiBaseUrl = (url: string) => {
   return trimmed === 'https://api.controld.com' ? '/api' : trimmed;
 };
 
-const asArray = <T>(value: unknown): T[] => {
+export const asArray = <T>(value: unknown): T[] => {
   if (Array.isArray(value)) {
     return value as T[];
   }
@@ -109,6 +110,18 @@ const asArray = <T>(value: unknown): T[] => {
   }
 
   return [];
+};
+
+export const extractApiArray = <T>(value: unknown, key?: string): T[] => {
+  if (Array.isArray(value)) return value as T[];
+
+  if (key && hasObjectValue(value)) {
+    const keyedValue = value[key];
+    if (Array.isArray(keyedValue)) return keyedValue as T[];
+    if (hasObjectValue(keyedValue)) return Object.values(keyedValue) as T[];
+  }
+
+  return asArray<T>(value).filter((item) => hasObjectValue(item) || typeof item !== 'boolean');
 };
 
 const hasObjectValue = (value: unknown): value is Record<string, unknown> =>
@@ -152,6 +165,31 @@ const enrichDevicesWithProfileNames = (deviceList: Device[], profileList: Profil
   });
 };
 
+const extractDevicesBody = (value: unknown) => {
+  const hasActivityEndpoint = hasObjectValue(value) && value.activity === true;
+  return {
+    devices: extractApiArray<Device>(value, 'devices'),
+    hasActivityEndpoint,
+  };
+};
+
+const loadDeviceActivitySummaries = async (deviceList: Device[]) => {
+  const results = await Promise.allSettled(
+    deviceList.map(async (device) => {
+      const res = await api.getAccessIPs(device.PK);
+      const accessEntries = extractApiArray<AccessIP>(res.body, 'ips')
+        .filter(hasObjectValue)
+        .map((entry) => entry as AccessIP);
+
+      return [device.PK, summarizeDeviceActivity(accessEntries)] as const;
+    })
+  );
+
+  return Object.fromEntries(
+    results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []))
+  );
+};
+
 let loadSequence = 0;
 const deviceSuspendTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -168,7 +206,7 @@ const loadServicesByCategories = async (serviceCategories: ServiceCategory[]) =>
     serviceCategories.map(async (cat) => {
       try {
         const svcs = await api.getServicesByCategory(cat.PK);
-        return asArray<Service>(svcs.body);
+        return extractApiArray<Service>(svcs.body, 'services');
       } catch {
         return [];
       }
@@ -329,12 +367,13 @@ export const useAppStore = create<AppState>()(
             api.getNetworkStats(),
           ]);
 
-          const profiles = asArray<Profile>(profilesRes.body);
-          const devices = enrichDevicesWithProfileNames(
-            asArray<Device>(devicesRes.body),
-            profiles
+          const profiles = extractApiArray<Profile>(profilesRes.body, 'profiles');
+          const devicesBody = extractDevicesBody(devicesRes.body);
+          const devices = enrichDevicesWithProfileNames(devicesBody.devices, profiles);
+          const serviceCategories = extractApiArray<ServiceCategory>(
+            categoriesRes.body,
+            'categories'
           );
-          const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
           const networkStats = normalizeNetworkStats(netRes.body);
 
           set({
@@ -352,6 +391,23 @@ export const useAppStore = create<AppState>()(
               set({ services: allServices });
             }
           });
+
+          if (devicesBody.hasActivityEndpoint) {
+            void loadDeviceActivitySummaries(devices).then((activityByDeviceId) => {
+              if (currentLoad === loadSequence) {
+                set((state) => ({
+                  devices: state.devices.map((device) => ({
+                    ...device,
+                    activity: activityByDeviceId[device.PK] ?? device.activity,
+                    known_ip_count:
+                      activityByDeviceId[device.PK]?.knownIpCount ?? device.known_ip_count,
+                    last_activity:
+                      activityByDeviceId[device.PK]?.lastSeen ?? device.last_activity,
+                  })),
+                }));
+              }
+            });
+          }
         } catch (err) {
           set({
             user: null,
@@ -379,7 +435,7 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const res = await api.getProfiles();
-          set({ profiles: asArray<Profile>(res.body) });
+          set({ profiles: extractApiArray<Profile>(res.body, 'profiles') });
         } catch {
           set({ error: 'Failed to refresh profiles' });
         }
@@ -392,9 +448,19 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const res = await api.getDevices();
-          set((state) => ({
-            devices: enrichDevicesWithProfileNames(asArray<Device>(res.body), state.profiles),
-          }));
+          const devicesBody = extractDevicesBody(res.body);
+          const devices = enrichDevicesWithProfileNames(devicesBody.devices, get().profiles);
+          const activityByDeviceId = devicesBody.hasActivityEndpoint
+            ? await loadDeviceActivitySummaries(devices)
+            : {};
+          set({
+            devices: devices.map((device) => ({
+              ...device,
+              activity: activityByDeviceId[device.PK] ?? device.activity,
+              known_ip_count: activityByDeviceId[device.PK]?.knownIpCount ?? device.known_ip_count,
+              last_activity: activityByDeviceId[device.PK]?.lastSeen ?? device.last_activity,
+            })),
+          });
         } catch {
           set({ error: 'Failed to refresh devices' });
         }
@@ -407,7 +473,10 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const categoriesRes = await api.getServiceCategories();
-          const serviceCategories = asArray<ServiceCategory>(categoriesRes.body);
+          const serviceCategories = extractApiArray<ServiceCategory>(
+            categoriesRes.body,
+            'categories'
+          );
           const allServices = await loadServicesByCategories(serviceCategories);
           set({ services: allServices, serviceCategories });
         } catch {
@@ -443,7 +512,10 @@ export const useAppStore = create<AppState>()(
           set((state) => ({
             profileServices: {
               ...state.profileServices,
-              [profileId]: mergeProfileServiceRules(state.services, asArray<Service>(res.body)),
+              [profileId]: mergeProfileServiceRules(
+                state.services,
+                extractApiArray<Service>(res.body, 'services')
+              ),
             },
           }));
         } catch {
@@ -458,7 +530,7 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const res = await api.getNativeFilters(profileId);
-          set({ filters: asArray<Filter>(res.body) });
+          set({ filters: extractApiArray<Filter>(res.body, 'filters') });
         } catch {
           set({ error: 'Failed to load profile filters' });
         }
@@ -475,8 +547,8 @@ export const useAppStore = create<AppState>()(
             api.getRuleFolders(profileId),
           ]);
           set({
-            customRules: normalizeCustomRules(asArray<CustomRule>(rulesRes.body)),
-            ruleFolders: asArray<RuleFolder>(foldersRes.body),
+            customRules: normalizeCustomRules(extractApiArray<CustomRule>(rulesRes.body, 'rules')),
+            ruleFolders: extractApiArray<RuleFolder>(foldersRes.body, 'groups'),
           });
         } catch {
           set({ error: 'Failed to refresh rules' });

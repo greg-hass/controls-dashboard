@@ -117,7 +117,8 @@ export const mockDevices: Device[] = [
     status: 1,
     resolver: 'dns.controld.com/abc123',
     last_activity: Date.now() / 1000 - 300,
-    clients: 4,
+    known_ip_count: 4,
+    activity: { state: 'online', label: 'Online', lastSeen: Date.now() / 1000 - 300, knownIpCount: 4 },
   },
   {
     PK: 'dev_002',
@@ -128,7 +129,8 @@ export const mockDevices: Device[] = [
     status: 1,
     resolver: 'dns.controld.com/def456',
     last_activity: Date.now() / 1000 - 120,
-    clients: 1,
+    known_ip_count: 1,
+    activity: { state: 'online', label: 'Online', lastSeen: Date.now() / 1000 - 120, knownIpCount: 1 },
   },
   {
     PK: 'dev_003',
@@ -139,7 +141,8 @@ export const mockDevices: Device[] = [
     status: 1,
     resolver: 'dns.controld.com/ghi789',
     last_activity: Date.now() / 1000 - 60,
-    clients: 12,
+    known_ip_count: 12,
+    activity: { state: 'online', label: 'Online', lastSeen: Date.now() / 1000 - 60, knownIpCount: 12 },
   },
   {
     PK: 'dev_004',
@@ -150,7 +153,8 @@ export const mockDevices: Device[] = [
     status: 1,
     resolver: 'dns.controld.com/jkl012',
     last_activity: Date.now() / 1000 - 1800,
-    clients: 1,
+    known_ip_count: 1,
+    activity: { state: 'offline', label: 'Offline', lastSeen: Date.now() / 1000 - 1800, knownIpCount: 1 },
   },
   {
     PK: 'dev_005',
@@ -161,7 +165,8 @@ export const mockDevices: Device[] = [
     status: 1,
     resolver: 'dns.controld.com/mno345',
     last_activity: Date.now() / 1000 - 600,
-    clients: 1,
+    known_ip_count: 1,
+    activity: { state: 'offline', label: 'Offline', lastSeen: Date.now() / 1000 - 600, knownIpCount: 1 },
   },
   {
     PK: 'dev_006',
@@ -172,7 +177,8 @@ export const mockDevices: Device[] = [
     status: 1,
     resolver: 'dns.controld.com/pqr678',
     last_activity: Date.now() / 1000 - 30,
-    clients: 8,
+    known_ip_count: 8,
+    activity: { state: 'online', label: 'Online', lastSeen: Date.now() / 1000 - 30, knownIpCount: 8 },
   },
 ];
 

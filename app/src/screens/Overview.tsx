@@ -17,7 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   formatDeviceLastActivity,
-  getDeviceConnectionMeta,
+  getDeviceActivityMeta,
+  getDeviceStateMeta,
   normalizeActivityTimestamp,
 } from '@/services/deviceStatus';
 
@@ -76,8 +77,8 @@ export function Overview() {
   // Recent device activity
   const recentDevices = [...devices]
     .sort((a, b) =>
-      (normalizeActivityTimestamp(b.last_activity) ?? 0) -
-      (normalizeActivityTimestamp(a.last_activity) ?? 0)
+      (normalizeActivityTimestamp(b.activity?.lastSeen ?? b.last_activity) ?? 0) -
+      (normalizeActivityTimestamp(a.activity?.lastSeen ?? a.last_activity) ?? 0)
     )
     .slice(0, 5);
 
@@ -328,7 +329,7 @@ export function Overview() {
                 >
                   <div className="flex items-center gap-3">
                     {(() => {
-                      const meta = getDeviceConnectionMeta(device);
+                      const meta = getDeviceActivityMeta(device);
                       return (
                         <div
                           className={`w-2 h-2 rounded-full ${meta.color}`}
@@ -344,10 +345,11 @@ export function Overview() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">
-                      {formatDeviceLastActivity(device.last_activity) || getDeviceConnectionMeta(device).label}
+                      {formatDeviceLastActivity(device.activity?.lastSeen ?? device.last_activity) ||
+                        getDeviceActivityMeta(device).label}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {device.clients} {device.clients === 1 ? 'client' : 'clients'}
+                      {getDeviceStateMeta(device).label} endpoint
                     </p>
                   </div>
                 </div>

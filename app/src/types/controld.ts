@@ -99,8 +99,27 @@ export interface Device {
   profile_name?: string;
   status: number;
   resolver?: string;
+  device_id?: string;
+  icon?: string;
+  desc?: string;
+  stats?: number;
+  restricted?: number;
+  learn_ip?: number;
+  resolvers?: {
+    uid?: string;
+    doh?: string;
+    dot?: string;
+    v4?: string[];
+    v6?: string[];
+  };
+  legacy_ipv4?: {
+    resolver?: string;
+    status?: number;
+  };
   last_activity?: number | string;
-  clients?: number;
+  configured_clients?: number;
+  known_ip_count?: number;
+  activity?: DeviceActivitySummary;
   client_count?: number | string;
 }
 
@@ -119,8 +138,18 @@ export interface DeviceType {
 
 export interface AccessIP {
   ip: string;
-  date: number;
-  learned: number;
+  date?: number | string;
+  ts?: number | string;
+  updated?: number | string;
+  learned?: number;
+  [key: string]: unknown;
+}
+
+export interface DeviceActivitySummary {
+  state: 'online' | 'offline' | 'unknown';
+  label: string;
+  lastSeen?: number;
+  knownIpCount?: number;
 }
 
 export interface AnalyticsLevel {

@@ -40,7 +40,8 @@ import { toast } from 'sonner';
 import {
   formatDeviceLastActivity,
   formatMinutesUntil,
-  getDeviceConnectionMeta,
+  getDeviceActivityMeta,
+  getDeviceStateMeta,
 } from '@/services/deviceStatus';
 
 const toSearchableText = (value: unknown) => String(value ?? '').toLowerCase();
@@ -71,11 +72,13 @@ export function Devices() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const getDeviceIcon = (type: string) => {
-    return type === 'router' ? Router : Smartphone;
+  const getDeviceIcon = (type: string, icon?: string) => {
+    const iconName = `${type} ${icon ?? ''}`.toLowerCase();
+    return iconName.includes('router') || iconName.includes('network') ? Router : Smartphone;
   };
 
-  const isDeviceOnline = (device: Device) => getDeviceConnectionMeta(device).online;
+  const isDeviceOnline = (device: Device) => device.activity?.state === 'online';
+  const enabledDevices = devices.filter((device) => device.status === 1).length;
 
   const handleTempDisable = async (deviceId: string, deviceName: string, minutes: number) => {
     try {
@@ -110,6 +113,9 @@ export function Devices() {
           <Badge variant="outline" className="text-emerald-500">
             {devices.filter(isDeviceOnline).length} online
           </Badge>
+          <Badge variant="outline" className="text-muted-foreground">
+            {enabledDevices} enabled
+          </Badge>
         </div>
       </div>
 
@@ -140,7 +146,7 @@ export function Devices() {
       {/* Device Grid */}
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredDevices.map((device) => {
-          const Icon = getDeviceIcon(device.type);
+          const Icon = getDeviceIcon(device.type, device.icon);
           const resolvedProfile = profiles.find(
             (profile) => profile.PK === device.profile || profile.name === device.profile
           );
@@ -161,18 +167,18 @@ export function Devices() {
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       'w-10 h-10 rounded-lg flex items-center justify-center',
-                      device.type === 'router' ? 'bg-blue-500/10' : 'bg-purple-500/10'
+                      Icon === Router ? 'bg-blue-500/10' : 'bg-purple-500/10'
                     )}>
                       <Icon className={cn(
                         'w-5 h-5',
-                        device.type === 'router' ? 'text-blue-500' : 'text-purple-500'
+                        Icon === Router ? 'text-blue-500' : 'text-purple-500'
                       )} />
                     </div>
                     <div>
                       <h3 className="font-medium text-sm">{device.name}</h3>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {(() => {
-                          const meta = getDeviceConnectionMeta(device);
+                          const meta = getDeviceActivityMeta(device);
                           return (
                             <>
                               <div className={cn('w-1.5 h-1.5 rounded-full', meta.color)} />
@@ -196,8 +202,8 @@ export function Devices() {
                         Disabled
                       </Badge>
                     )}
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {String(device.type ?? '')}
+                    <Badge variant="outline" className={cn('text-xs', getDeviceStateMeta(device).textColor)}>
+                      {getDeviceStateMeta(device).label}
                     </Badge>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -261,9 +267,11 @@ export function Devices() {
                   <div className="p-2.5 rounded-lg bg-secondary/30">
                     <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
                       <Activity className="w-3.5 h-3.5" />
-                      <span className="text-xs">Clients</span>
+                      <span className="text-xs">Known IPs</span>
                     </div>
-                    <p className="text-sm font-medium">{device.clients || 0}</p>
+                    <p className="text-sm font-medium">
+                      {device.known_ip_count ?? device.activity?.knownIpCount ?? 'Not reported'}
+                    </p>
                   </div>
                 </div>
 
@@ -292,11 +300,13 @@ export function Devices() {
                 )}
 
                 {/* Last Activity */}
-                {formatDeviceLastActivity(device.last_activity) && (
+                {(formatDeviceLastActivity(device.activity?.lastSeen ?? device.last_activity) ||
+                  device.activity?.label) && (
                   <div className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground">
                     <Clock className="w-3 h-3" />
                     <span>
-                      Last active: {formatDeviceLastActivity(device.last_activity)}
+                      Last query: {formatDeviceLastActivity(device.activity?.lastSeen ?? device.last_activity) ||
+                        device.activity?.label}
                     </span>
                   </div>
                 )}
