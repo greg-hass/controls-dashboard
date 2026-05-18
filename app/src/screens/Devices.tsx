@@ -37,6 +37,11 @@ import {
 import { cn } from '@/lib/utils';
 import type { Device } from '@/types/controld';
 import { toast } from 'sonner';
+import {
+  formatDeviceLastActivity,
+  formatMinutesUntil,
+  getDeviceConnectionMeta,
+} from '@/services/deviceStatus';
 
 const toSearchableText = (value: unknown) => String(value ?? '').toLowerCase();
 
@@ -70,70 +75,7 @@ export function Devices() {
     return type === 'router' ? Router : Smartphone;
   };
 
-  // Control D device statuses:
-  // 0 = Unused (never configured)
-  // 1 = Active (configured and used)
-  // 2 = Profile not enforced (bypass mode)
-  // 3 = Disabled (hard disabled)
-  const getStatusMeta = (status: number) => {
-    switch (status) {
-      case 0:
-        return { color: 'bg-slate-400', label: 'Unused', textColor: 'text-slate-400' };
-      case 1:
-        return { color: 'bg-emerald-500', label: 'Active', textColor: 'text-emerald-500' };
-      case 2:
-        return { color: 'bg-amber-500', label: 'Bypass', textColor: 'text-amber-500' };
-      case 3:
-        return { color: 'bg-red-500', label: 'Disabled', textColor: 'text-red-500' };
-      default:
-        return { color: 'bg-slate-400', label: 'Unknown', textColor: 'text-slate-400' };
-    }
-  };
-
-  // Derive real-time online status from last_activity timestamp.
-  // The Control D API returns last_activity in various formats:
-  // - Unix timestamp in seconds or milliseconds
-  // - ISO 8601 date string
-  // - May be missing/null for unused devices
-  const isDeviceOnline = (device: Device) => {
-    const raw = device.last_activity;
-    if (raw == null) return false;
-
-    let lastMs: number | undefined;
-
-    if (typeof raw === 'number') {
-      // Distinguish seconds vs milliseconds by magnitude
-      lastMs = raw > 1e10 ? raw : raw * 1000;
-    } else if (typeof raw === 'string') {
-      // Try ISO date first, then numeric string
-      const parsed = Date.parse(raw);
-      if (!isNaN(parsed)) {
-        lastMs = parsed;
-      } else {
-        const num = Number(raw);
-        if (!isNaN(num)) {
-          lastMs = num > 1e10 ? num : num * 1000;
-        }
-      }
-    }
-
-    if (lastMs == null) return false;
-
-    const minutesSince = (Date.now() - lastMs) / 60000;
-    return minutesSince >= 0 && minutesSince < 5;
-  };
-
-  const formatRemaining = (expiresAt?: number) => {
-    if (!expiresAt) return '';
-    const remainingMinutes = Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000));
-    if (remainingMinutes < 60) {
-      return `${remainingMinutes}m`;
-    }
-
-    const hours = Math.floor(remainingMinutes / 60);
-    const minutes = remainingMinutes % 60;
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  };
+  const isDeviceOnline = (device: Device) => getDeviceConnectionMeta(device).online;
 
   const handleTempDisable = async (deviceId: string, deviceName: string, minutes: number) => {
     try {
@@ -210,7 +152,7 @@ export function Devices() {
             'Unassigned';
           const assignedProfileValue = resolvedProfile?.PK || device.profile || '';
           const suspension = deviceSuspensions[device.PK];
-          const remainingLabel = suspension ? formatRemaining(suspension.expiresAt) : '';
+          const remainingLabel = suspension ? formatMinutesUntil(suspension.expiresAt) : '';
           return (
             <Card key={device.PK} className="glass-card hover:shadow-lg transition-shadow">
               <CardContent className="p-5">
@@ -230,19 +172,13 @@ export function Devices() {
                       <h3 className="font-medium text-sm">{device.name}</h3>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {(() => {
-                          const online = isDeviceOnline(device);
-                          const meta = getStatusMeta(device.status);
+                          const meta = getDeviceConnectionMeta(device);
                           return (
                             <>
-                              <div className={cn('w-1.5 h-1.5 rounded-full', online ? 'bg-emerald-500' : 'bg-red-500')} />
-                              <span className={cn('text-xs capitalize', online ? 'text-emerald-500' : 'text-red-500')}>
-                                {online ? 'Online' : 'Offline'}
+                              <div className={cn('w-1.5 h-1.5 rounded-full', meta.color)} />
+                              <span className={cn('text-xs capitalize', meta.textColor)}>
+                                {meta.label}
                               </span>
-                              {device.status !== 1 && (
-                                <span className="text-xs text-muted-foreground">
-                                  ({meta.label})
-                                </span>
-                              )}
                             </>
                           );
                         })()}
@@ -252,7 +188,7 @@ export function Devices() {
                   <div className="flex items-center gap-2">
                     {device.status === 2 && (
                       <Badge variant="secondary" className="text-amber-500 border-amber-500/20">
-                        Bypass mode
+                        Paused
                       </Badge>
                     )}
                     {device.status === 3 && (
@@ -356,11 +292,11 @@ export function Devices() {
                 )}
 
                 {/* Last Activity */}
-                {device.last_activity && (
+                {formatDeviceLastActivity(device.last_activity) && (
                   <div className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground">
                     <Clock className="w-3 h-3" />
                     <span>
-                      Last active: {Math.floor((Date.now() / 1000 - device.last_activity) / 60)}m ago
+                      Last active: {formatDeviceLastActivity(device.last_activity)}
                     </span>
                   </div>
                 )}

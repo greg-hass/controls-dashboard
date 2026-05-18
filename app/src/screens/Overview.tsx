@@ -15,6 +15,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  formatDeviceLastActivity,
+  getDeviceConnectionMeta,
+  normalizeActivityTimestamp,
+} from '@/services/deviceStatus';
 
 import {
   BarChart,
@@ -70,7 +75,10 @@ export function Overview() {
 
   // Recent device activity
   const recentDevices = [...devices]
-    .sort((a, b) => (b.last_activity || 0) - (a.last_activity || 0))
+    .sort((a, b) =>
+      (normalizeActivityTimestamp(b.last_activity) ?? 0) -
+      (normalizeActivityTimestamp(a.last_activity) ?? 0)
+    )
     .slice(0, 5);
 
   // Current POP
@@ -320,30 +328,10 @@ export function Overview() {
                 >
                   <div className="flex items-center gap-3">
                     {(() => {
-                      const raw = device.last_activity;
-                      let online = false;
-                      if (raw != null) {
-                        let lastMs: number | undefined;
-                        if (typeof raw === 'number') {
-                          lastMs = raw > 1e10 ? raw : raw * 1000;
-                        } else if (typeof raw === 'string') {
-                          const parsed = Date.parse(raw);
-                          if (!isNaN(parsed)) {
-                            lastMs = parsed;
-                          } else {
-                            const num = Number(raw);
-                            if (!isNaN(num)) {
-                              lastMs = num > 1e10 ? num : num * 1000;
-                            }
-                          }
-                        }
-                        if (lastMs != null) {
-                          online = (Date.now() - lastMs) / 60000 < 5;
-                        }
-                      }
+                      const meta = getDeviceConnectionMeta(device);
                       return (
                         <div
-                          className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-red-500'}`}
+                          className={`w-2 h-2 rounded-full ${meta.color}`}
                         />
                       );
                     })()}
@@ -356,9 +344,7 @@ export function Overview() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">
-                      {device.last_activity
-                        ? `${Math.floor((Date.now() / 1000 - device.last_activity) / 60)}m ago`
-                        : 'Unknown'}
+                      {formatDeviceLastActivity(device.last_activity) || getDeviceConnectionMeta(device).label}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {device.clients} {device.clients === 1 ? 'client' : 'clients'}

@@ -19,6 +19,7 @@ import type {
 } from '@/types/controld';
 import * as mock from '@/data/mock';
 import { api } from '@/services/api';
+import { normalizeControlDDevice } from '@/services/deviceStatus';
 import {
   loadSchedulerState,
   restoreDevicePause,
@@ -129,44 +130,24 @@ const normalizeNetworkStats = (value: unknown): NetworkStats[] =>
     }))
     .filter((item) => item.pop !== 'unknown');
 
-// API sometimes returns fields as objects {PK, name, updated} instead of strings.
-// For ID fields (profile, etc.) we need the PK; for display fields (type) we need the name.
-const normalizeIdOrObject = (value: unknown): string => {
-  if (typeof value === 'string') return value;
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return (value as Record<string, unknown>).PK as string || '';
-  }
-  return '';
-};
-
-const normalizeStringOrObject = (value: unknown): string => {
-  if (typeof value === 'string') return value;
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return (value as Record<string, unknown>).name as string || '';
-  }
-  return '';
-};
-
 const enrichDevicesWithProfileNames = (deviceList: Device[], profileList: Profile[]) => {
   const profileById = new Map(profileList.map((profile) => [profile.PK, profile.name]));
   const profileByName = new Map(profileList.map((profile) => [profile.name, profile.name]));
 
   return deviceList.map((device) => {
-    const profileId = normalizeIdOrObject(device.profile);
+    const normalized = normalizeControlDDevice(device);
+    const profileId = normalized.profile;
     const profileName =
-      normalizeStringOrObject(device.profile_name) ||
+      normalized.profile_name ||
       profileById.get(profileId) ||
       profileByName.get(profileId) ||
       profileId ||
       '';
 
-    const typeValue = normalizeStringOrObject(device.type);
-
     return {
-      ...device,
+      ...normalized,
       profile: profileId,
       profile_name: profileName,
-      type: typeValue,
     };
   });
 };

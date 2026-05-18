@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import {
   ListChecks,
@@ -40,16 +40,24 @@ export function Rules() {
   const customRules = useAppStore((state) => state.customRules);
   const ruleFolders = useAppStore((state) => state.ruleFolders);
   const profiles = useAppStore((state) => state.profiles);
+  const refreshRules = useAppStore((state) => state.refreshRules);
   const createCustomRule = useAppStore((state) => state.createCustomRule);
   const deleteCustomRule = useAppStore((state) => state.deleteCustomRule);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState<string>(profiles[0]?.PK || '');
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newRule, setNewRule] = useState<Partial<CustomRule>>({
     hostname: '',
     action: 'block',
     group: '',
   });
+  const selectedProfile = selectedProfileId || profiles[0]?.PK || '';
+
+  useEffect(() => {
+    if (selectedProfile) {
+      refreshRules(selectedProfile);
+    }
+  }, [refreshRules, selectedProfile]);
 
   const filteredRules = customRules.filter((r: CustomRule) =>
     toSearchableText(r.hostname).includes(searchQuery.toLowerCase()) ||
@@ -63,9 +71,9 @@ export function Rules() {
     return acc;
   }, {});
 
-  const handleCreateRule = () => {
+  const handleCreateRule = async () => {
     if (!newRule.hostname || !selectedProfile) return;
-    createCustomRule(selectedProfile, newRule);
+    await createCustomRule(selectedProfile, newRule);
     setNewRule({ hostname: '', action: 'block', group: '' });
     setShowAddDialog(false);
   };
@@ -115,7 +123,7 @@ export function Rules() {
             className="pl-9"
           />
         </div>
-        <Select value={selectedProfile} onValueChange={setSelectedProfile}>
+        <Select value={selectedProfile} onValueChange={setSelectedProfileId}>
           <SelectTrigger className="w-[180px]">
             <Shield className="w-4 h-4 mr-2" />
             <SelectValue placeholder="Select profile" />

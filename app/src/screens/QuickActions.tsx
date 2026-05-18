@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import {
   UtensilsCrossed,
@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import type { QuickAction } from '@/types/controld';
+import { getCurrentTimeMs } from '@/services/deviceStatus';
 
 const iconMap: Record<string, React.ReactNode> = {
   UtensilsCrossed: <UtensilsCrossed className="w-6 h-6" />,
@@ -49,61 +50,81 @@ interface ActiveAction {
   startTime: number;
   endTime: number;
   remainingMinutes: number;
+  previousStatuses: Record<string, number>;
 }
 
 export function QuickActions() {
   const quickActions = useAppStore((state) => state.quickActions);
   const services = useAppStore((state) => state.services);
+  const profileServices = useAppStore((state) => state.profileServices);
   const updateProfileServices = useAppStore((state) => state.updateProfileServices);
   const [activeActions, setActiveActions] = useState<ActiveAction[]>([]);
   const [completedAction, setCompletedAction] = useState<string | null>(null);
+
+  const statusKey = (profileId: string, serviceId: string) => `${profileId}:${serviceId}`;
+
+  const getCurrentServiceStatus = useCallback(
+    (profileId: string, serviceId: string) =>
+      (profileServices[profileId] ?? services).find((service) => service.PK === serviceId)?.status ?? 1,
+    [profileServices, services]
+  );
+
+  const restoreServices = useCallback((previousStatuses: Record<string, number>) => {
+    void Promise.all(
+      Object.entries(previousStatuses).map(([key, status]) => {
+        const [profileId, serviceId] = key.split(':');
+        if (!profileId || !serviceId) return Promise.resolve();
+        return updateProfileServices(profileId, serviceId, status);
+      })
+    );
+  }, [updateProfileServices]);
 
   // Timer effect
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveActions((prev) => {
-        const now = Date.now();
+        const now = getCurrentTimeMs();
         const updated = prev.map((a) => ({
           ...a,
           remainingMinutes: Math.max(0, Math.ceil((a.endTime - now) / 60000)),
         }));
-        // Remove completed actions
         const completed = updated.filter((a) => a.remainingMinutes === 0);
         if (completed.length > 0) {
           completed.forEach((c) => {
             setCompletedAction(c.action.name);
             setTimeout(() => setCompletedAction(null), 3000);
-            restoreServices(c.action);
+            restoreServices(c.previousStatuses);
           });
         }
         return updated.filter((a) => a.remainingMinutes > 0);
       });
-    }, 10000); // Check every 10 seconds
+    }, 10000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [restoreServices]);
 
-  const restoreServices = (action: QuickAction) => {
-    // Restore blocked services back to allowed
-    action.services_to_block?.forEach((serviceId) => {
-      action.profile_ids?.forEach((profileId) => {
-        updateProfileServices(profileId, serviceId, 1);
-      });
-    });
-  };
-
-  const activateAction = (action: QuickAction) => {
-    const now = Date.now();
+  const activateAction = async (action: QuickAction) => {
+    const now = getCurrentTimeMs();
     const durationMs = (action.duration_minutes || 60) * 60 * 1000;
+    const previousStatuses: Record<string, number> = {};
+    const mutations: Promise<void>[] = [];
 
-    // Block services
     action.services_to_block?.forEach((serviceId) => {
       action.profile_ids?.forEach((profileId) => {
-        updateProfileServices(profileId, serviceId, 0);
+        previousStatuses[statusKey(profileId, serviceId)] = getCurrentServiceStatus(profileId, serviceId);
+        mutations.push(updateProfileServices(profileId, serviceId, 0));
       });
     });
 
-    // Add to active actions
+    action.services_to_allow?.forEach((serviceId) => {
+      action.profile_ids?.forEach((profileId) => {
+        previousStatuses[statusKey(profileId, serviceId)] = getCurrentServiceStatus(profileId, serviceId);
+        mutations.push(updateProfileServices(profileId, serviceId, 1));
+      });
+    });
+
+    await Promise.all(mutations);
+
     setActiveActions((prev) => [
       ...prev.filter((a) => a.action.id !== action.id),
       {
@@ -111,13 +132,17 @@ export function QuickActions() {
         startTime: now,
         endTime: now + durationMs,
         remainingMinutes: action.duration_minutes || 60,
+        previousStatuses,
       },
     ]);
   };
 
   const cancelAction = (actionToCancel: QuickAction) => {
+    const activeAction = activeActions.find((action) => action.action.id === actionToCancel.id);
     setActiveActions((prev) => prev.filter((a) => a.action.id !== actionToCancel.id));
-    restoreServices(actionToCancel);
+    if (activeAction) {
+      restoreServices(activeAction.previousStatuses);
+    }
   };
 
   return (

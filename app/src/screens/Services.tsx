@@ -59,8 +59,9 @@ export function Services() {
   const loadProfileServices = useAppStore((state) => state.loadProfileServices);
   const updateProfileServices = useAppStore((state) => state.updateProfileServices);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState<string>(profiles[0]?.PK || '');
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const selectedProfile = selectedProfileId || profiles[0]?.PK || '';
   const currentServices = selectedProfile
     ? profileServices[selectedProfile] ?? services
     : services;
@@ -121,7 +122,7 @@ export function Services() {
                   key={profile.PK}
                   variant={selectedProfile === profile.PK ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setSelectedProfile(profile.PK)}
+                  onClick={() => setSelectedProfileId(profile.PK)}
                   className="text-xs"
                 >
                   {profile.name}

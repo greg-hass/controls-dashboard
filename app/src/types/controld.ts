@@ -99,8 +99,9 @@ export interface Device {
   profile_name?: string;
   status: number;
   resolver?: string;
-  last_activity?: number;
+  last_activity?: number | string;
   clients?: number;
+  client_count?: number | string;
 }
 
 export interface DeviceSchedule {
