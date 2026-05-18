@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collectRouteLocations,
   normalizeControlDRuleFolders,
   normalizeControlDRules,
   normalizeProfileServiceRules,
@@ -54,5 +55,15 @@ describe('Control D documented data shapes', () => {
     ).toEqual([
       expect.objectContaining({ PK: '2', name: 'Streaming', count: 5, status: 1, action: 'redirect' }),
     ]);
+  });
+
+  it('collects route locations from service lists and current routing rules', () => {
+    expect(
+      collectRouteLocations([
+        { PK: 'one', name: 'One', category: 'video', status: 1, locations: ['LON'] },
+        { PK: 'two', name: 'Two', category: 'video', status: 3, via: 'YYZ' },
+        { PK: 'three', name: 'Three', category: 'video', status: 1, unlock_location: 'JFK' },
+      ])
+    ).toEqual(['LON', 'YYZ', 'JFK']);
   });
 });

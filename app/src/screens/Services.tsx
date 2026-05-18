@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { Service, ServiceCategory, Profile } from '@/types/controld';
+import { collectRouteLocations } from '@/services/controldData';
 
 const categoryIcons: Record<string, React.ReactNode> = {
   social: <Globe className="w-4 h-4" />,
@@ -72,6 +73,7 @@ export function Services() {
   const currentServices = selectedProfile
     ? profileServices[selectedProfile] ?? services
     : services;
+  const availableRouteLocations = collectRouteLocations(currentServices);
 
   useEffect(() => {
     if (selectedProfile) {
@@ -200,6 +202,7 @@ export function Services() {
                         category={category}
                         onToggle={() => handleToggleService(service.PK, service.status)}
                         onRoute={(location) => handleRouteService(service.PK, location)}
+                        fallbackRouteLocations={availableRouteLocations}
                       />
                     ))}
                   </div>
@@ -215,6 +218,7 @@ export function Services() {
                   category={service.category}
                   onToggle={() => handleToggleService(service.PK, service.status)}
                   onRoute={(location) => handleRouteService(service.PK, location)}
+                  fallbackRouteLocations={availableRouteLocations}
                 />
               ))}
             </div>
@@ -237,14 +241,16 @@ function ServiceCard({
   category,
   onToggle,
   onRoute,
+  fallbackRouteLocations,
 }: {
   service: Service;
   category: string;
   onToggle: () => void;
   onRoute: (location: string) => void;
+  fallbackRouteLocations: string[];
 }) {
   const routeValue = service.status === 3 && service.via ? service.via : 'default';
-  const routeLocations = service.locations ?? [];
+  const routeLocations = service.locations?.length ? service.locations : fallbackRouteLocations;
 
   return (
     <div
@@ -293,23 +299,21 @@ function ServiceCard({
           </>
         )}
       </div>
-      {routeLocations.length > 0 && (
-        <div className="mt-3" onClick={(event) => event.stopPropagation()}>
-          <Select value={routeValue} onValueChange={onRoute}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Route location" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="default">Default route</SelectItem>
-              {routeLocations.map((location) => (
-                <SelectItem key={location} value={location}>
-                  {location}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+        <Select value={routeValue} onValueChange={onRoute} disabled={routeLocations.length === 0}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="Route location" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Default route</SelectItem>
+            {routeLocations.map((location) => (
+              <SelectItem key={location} value={location}>
+                {location}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }

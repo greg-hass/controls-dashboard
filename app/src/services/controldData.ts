@@ -17,6 +17,19 @@ const readNumber = (value: unknown) => {
 const readString = (value: unknown) =>
   value === undefined || value === null ? undefined : String(value);
 
+const readStringArray = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value.map(readString).filter((item): item is string => Boolean(item));
+  }
+
+  if (isObject(value)) {
+    return Object.values(value).map(readString).filter((item): item is string => Boolean(item));
+  }
+
+  const single = readString(value);
+  return single ? [single] : [];
+};
+
 export const readControlDAction = (value: unknown) => {
   const action = isObject(value) ? value : {};
 
@@ -59,7 +72,7 @@ export const normalizeProfileServiceRules = (
       PK: String(service.PK ?? rule?.PK ?? ''),
       name: readString(rule?.name) ?? readString(service.name) ?? String(service.PK ?? rule?.PK ?? ''),
       category: readString(rule?.category) ?? readString(service.category) ?? '',
-      locations: (rule?.locations ?? service.locations) as string[] | undefined,
+      locations: readStringArray(rule?.locations ?? service.locations),
       unlock_location: readString(rule?.unlock_location) ?? readString(service.unlock_location),
       warning: readString(rule?.warning) ?? readString(service.warning),
       status: rule ? toDashboardServiceStatus(rule) : 1,
@@ -114,3 +127,13 @@ export const normalizeControlDRuleFolders = (folders: unknown[]): RuleFolder[] =
       via: action.via ?? readString(folder.via),
     } as RuleFolder;
   });
+
+export const collectRouteLocations = (services: Partial<Service>[]) => {
+  const locations = services.flatMap((service) => [
+    ...readStringArray(service.locations),
+    readString(service.via),
+    readString(service.unlock_location),
+  ]);
+
+  return [...new Set(locations.filter((location): location is string => Boolean(location)))];
+};

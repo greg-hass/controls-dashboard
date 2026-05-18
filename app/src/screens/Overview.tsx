@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '@/store/appStore';
 import {
@@ -42,27 +43,40 @@ export function Overview() {
   const profiles = useAppStore((state) => state.profiles);
   const devices = useAppStore((state) => state.devices);
   const services = useAppStore((state) => state.services);
+  const profileServices = useAppStore((state) => state.profileServices);
+  const loadProfileServices = useAppStore((state) => state.loadProfileServices);
   const networkStats = useAppStore((state) => state.networkStats);
   const filters = useAppStore((state) => state.filters);
   const ipInfo = useAppStore((state) => state.ipInfo);
+  const overviewProfileId = profiles[0]?.PK ?? '';
+  const overviewServices = overviewProfileId
+    ? profileServices[overviewProfileId] ?? services
+    : services;
+
+  useEffect(() => {
+    if (overviewProfileId) {
+      loadProfileServices(overviewProfileId);
+    }
+  }, [loadProfileServices, overviewProfileId, services.length]);
 
   const stats = {
     profiles: profiles.length,
     devices: devices.length,
-    services: services.length,
-    blockedServices: services.filter((s: Service) => s.status === 0).length,
+    services: overviewServices.length,
+    blockedServices: overviewServices.filter((s: Service) => s.status === 0).length,
     activeFilters: filters.filter((f) => f.status === 1).length,
   };
 
   // Service status breakdown for chart
   const serviceStatusData = [
-    { name: 'Blocked', value: services.filter((s: Service) => s.status === 0).length },
-    { name: 'Allowed', value: services.filter((s: Service) => s.status === 1).length },
-    { name: 'Bypass', value: services.filter((s: Service) => s.status === 2).length },
+    { name: 'Blocked', value: overviewServices.filter((s: Service) => s.status === 0).length },
+    { name: 'Allowed', value: overviewServices.filter((s: Service) => s.status === 1).length },
+    { name: 'Bypass', value: overviewServices.filter((s: Service) => s.status === 2).length },
+    { name: 'Routed', value: overviewServices.filter((s: Service) => s.status === 3).length },
   ];
 
   // Top blocked categories
-  const blockedByCategory = services
+  const blockedByCategory = overviewServices
     .filter((s: Service) => s.status === 0)
     .reduce((acc: Record<string, number>, s) => {
       acc[s.category] = (acc[s.category] || 0) + 1;
