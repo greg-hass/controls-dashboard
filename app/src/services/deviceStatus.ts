@@ -160,8 +160,8 @@ export const summarizeDeviceActivity = (
 
   if (lastSeen === undefined) {
     return {
-      state: knownIpCount > 0 ? 'unknown' : 'unknown',
-      label: knownIpCount > 0 ? 'Known IPs only' : 'No recent queries',
+      state: knownIpCount > 0 ? 'offline' : 'offline',
+      label: knownIpCount > 0 ? 'Seen before' : 'Offline',
       knownIpCount,
     };
   }

@@ -52,6 +52,7 @@ export function Rules() {
     group: '',
   });
   const selectedProfile = selectedProfileId || profiles[0]?.PK || '';
+  const folderNameById = new Map(ruleFolders.map((folder) => [folder.PK, folder.name]));
 
   useEffect(() => {
     if (selectedProfile) {
@@ -215,7 +216,9 @@ export function Rules() {
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <Folder className="w-4 h-4 text-primary" />
-                <CardTitle className="text-sm">{folder}</CardTitle>
+                <CardTitle className="text-sm">
+                  {folderNameById.get(folder) ?? folder}
+                </CardTitle>
                 <Badge variant="outline" className="text-xs">{rules.length} rules</Badge>
               </div>
             </CardHeader>
@@ -287,7 +290,7 @@ export function Rules() {
                   <Folder className="w-3 h-3 mr-1" />
                   {folder.name}
                   <span className="ml-1.5 text-muted-foreground">
-                    ({customRules.filter((r: CustomRule) => r.group === folder.PK).length})
+                    ({customRules.filter((r: CustomRule) => String(r.group) === folder.PK).length})
                   </span>
                 </Badge>
               ))}

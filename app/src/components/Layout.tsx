@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAppStore } from '@/store/appStore';
 import {
@@ -43,10 +43,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const user = useAppStore((state) => state.user);
   const settings = useAppStore((state) => state.settings);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location]);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -95,6 +91,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.path}
                 to={item.path}
+                onClick={() => setMobileOpen(false)}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative',
                   isActive

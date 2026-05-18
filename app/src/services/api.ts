@@ -36,13 +36,17 @@ export const buildControlDFormBody = (payload: ControlDFormPayload) => {
   return body;
 };
 
-export const toControlDServiceRulePayload = (status: number) => {
+export const toControlDServiceRulePayload = (status: number, via?: string) => {
   if (status === 0) {
     return { do: 0, status: 1 };
   }
 
   if (status === 2) {
     return { do: 1, status: 1 };
+  }
+
+  if (status === 3) {
+    return { do: 3, status: 1, via };
   }
 
   return { do: 0, status: 0 };
@@ -214,10 +218,15 @@ class ControlDApi {
     return this.request<ApiResponse<Service[]>>(`/profiles/${pk}/services`);
   }
 
-  async updateService(pk: string, service: string, status: number): Promise<ApiResponse<unknown>> {
+  async updateService(
+    pk: string,
+    service: string,
+    status: number,
+    via?: string
+  ): Promise<ApiResponse<unknown>> {
     return this.request<ApiResponse<unknown>>(`/profiles/${pk}/services/${service}`, {
       method: 'PUT',
-      body: buildControlDFormBody(toControlDServiceRulePayload(status)),
+      body: buildControlDFormBody(toControlDServiceRulePayload(status, via)),
     });
   }
 

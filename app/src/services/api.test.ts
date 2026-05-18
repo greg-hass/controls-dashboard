@@ -15,6 +15,7 @@ describe('Control D API payloads', () => {
     expect(toControlDServiceRulePayload(0)).toEqual({ do: 0, status: 1 });
     expect(toControlDServiceRulePayload(1)).toEqual({ do: 0, status: 0 });
     expect(toControlDServiceRulePayload(2)).toEqual({ do: 1, status: 1 });
+    expect(toControlDServiceRulePayload(3, 'LON')).toEqual({ do: 3, status: 1, via: 'LON' });
   });
 
   it('uses Control D device field names instead of app field names', () => {

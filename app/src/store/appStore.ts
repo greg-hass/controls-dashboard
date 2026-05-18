@@ -20,6 +20,11 @@ import type {
 } from '@/types/controld';
 import * as mock from '@/data/mock';
 import { api } from '@/services/api';
+import {
+  normalizeControlDRuleFolders,
+  normalizeControlDRules,
+  normalizeProfileServiceRules,
+} from '@/services/controldData';
 import { normalizeControlDDevice, summarizeDeviceActivity } from '@/services/deviceStatus';
 import {
   loadSchedulerState,
@@ -75,7 +80,12 @@ interface AppState {
   syncSchedulerToken: () => Promise<void>;
 
   // Mutations
-  updateProfileServices: (profileId: string, serviceId: string, status: number) => Promise<void>;
+  updateProfileServices: (
+    profileId: string,
+    serviceId: string,
+    status: number,
+    via?: string
+  ) => Promise<void>;
   updateFilter: (profileId: string, filterId: string, status: number) => Promise<void>;
   updateDeviceProfile: (deviceId: string, profileId: string) => Promise<void>;
   updateDeviceStatus: (deviceId: string, status: number) => Promise<void>;
@@ -122,6 +132,28 @@ export const extractApiArray = <T>(value: unknown, key?: string): T[] => {
   }
 
   return asArray<T>(value).filter((item) => hasObjectValue(item) || typeof item !== 'boolean');
+};
+
+export const extractAccessEntries = (value: unknown): AccessIP[] => {
+  const candidate = hasObjectValue(value) && value.ips !== undefined ? value.ips : value;
+
+  if (Array.isArray(candidate)) {
+    return candidate.filter(hasObjectValue).map((entry) => entry as AccessIP);
+  }
+
+  if (hasObjectValue(candidate)) {
+    return Object.entries(candidate).flatMap(([ip, entry]) => {
+      if (hasObjectValue(entry)) {
+        return [{ ip, ...entry } as AccessIP];
+      }
+      if (typeof entry === 'string' || typeof entry === 'number') {
+        return [{ ip, date: entry } as AccessIP];
+      }
+      return [];
+    });
+  }
+
+  return [];
 };
 
 const hasObjectValue = (value: unknown): value is Record<string, unknown> =>
@@ -176,10 +208,13 @@ const extractDevicesBody = (value: unknown) => {
 const loadDeviceActivitySummaries = async (deviceList: Device[]) => {
   const results = await Promise.allSettled(
     deviceList.map(async (device) => {
-      const res = await api.getAccessIPs(device.PK);
-      const accessEntries = extractApiArray<AccessIP>(res.body, 'ips')
-        .filter(hasObjectValue)
-        .map((entry) => entry as AccessIP);
+      let accessEntries: AccessIP[] = [];
+      try {
+        const res = await api.getAccessIPs(device.PK);
+        accessEntries = extractAccessEntries(res.body);
+      } catch {
+        accessEntries = [];
+      }
 
       return [device.PK, summarizeDeviceActivity(accessEntries)] as const;
     })
@@ -215,46 +250,6 @@ const loadServicesByCategories = async (serviceCategories: ServiceCategory[]) =>
 
   return results.flat();
 };
-
-const toAppServiceStatus = (service: Service) => {
-  if (service.status === 0) return 1;
-  if (service.do === 0) return 0;
-  if (service.do === 1) return 2;
-  return service.status ?? 1;
-};
-
-const mergeProfileServiceRules = (catalog: Service[], rules: Service[]) => {
-  const rulesById = new Map(rules.map((service) => [service.PK, service]));
-
-  return catalog.map((service) => {
-    const rule = rulesById.get(service.PK);
-    if (!rule) {
-      return { ...service, status: 1 };
-    }
-
-    return {
-      ...service,
-      ...rule,
-      name: rule.name ?? service.name,
-      category: rule.category ?? service.category,
-      status: toAppServiceStatus(rule),
-    };
-  });
-};
-
-const toAppRuleAction = (rule: CustomRule): CustomRule['action'] => {
-  if (rule.action) return rule.action;
-  if (rule.do === 0) return 'block';
-  if (rule.do === 1) return 'allow';
-  return 'redirect';
-};
-
-const normalizeCustomRules = (rules: CustomRule[]) =>
-  rules.map((rule) => ({
-    ...rule,
-    action: toAppRuleAction(rule),
-    value: rule.value ?? rule.via,
-  }));
 
 const withoutDeviceSuspension = (
   suspensions: Record<string, DeviceSchedule>,
@@ -392,22 +387,20 @@ export const useAppStore = create<AppState>()(
             }
           });
 
-          if (devicesBody.hasActivityEndpoint) {
-            void loadDeviceActivitySummaries(devices).then((activityByDeviceId) => {
-              if (currentLoad === loadSequence) {
-                set((state) => ({
-                  devices: state.devices.map((device) => ({
-                    ...device,
-                    activity: activityByDeviceId[device.PK] ?? device.activity,
-                    known_ip_count:
-                      activityByDeviceId[device.PK]?.knownIpCount ?? device.known_ip_count,
-                    last_activity:
-                      activityByDeviceId[device.PK]?.lastSeen ?? device.last_activity,
-                  })),
-                }));
-              }
-            });
-          }
+          void loadDeviceActivitySummaries(devices).then((activityByDeviceId) => {
+            if (currentLoad === loadSequence) {
+              set((state) => ({
+                devices: state.devices.map((device) => ({
+                  ...device,
+                  activity: activityByDeviceId[device.PK] ?? device.activity,
+                  known_ip_count:
+                    activityByDeviceId[device.PK]?.knownIpCount ?? device.known_ip_count,
+                  last_activity:
+                    activityByDeviceId[device.PK]?.lastSeen ?? device.last_activity,
+                })),
+              }));
+            }
+          });
         } catch (err) {
           set({
             user: null,
@@ -450,9 +443,7 @@ export const useAppStore = create<AppState>()(
           const res = await api.getDevices();
           const devicesBody = extractDevicesBody(res.body);
           const devices = enrichDevicesWithProfileNames(devicesBody.devices, get().profiles);
-          const activityByDeviceId = devicesBody.hasActivityEndpoint
-            ? await loadDeviceActivitySummaries(devices)
-            : {};
+          const activityByDeviceId = await loadDeviceActivitySummaries(devices);
           set({
             devices: devices.map((device) => ({
               ...device,
@@ -512,7 +503,7 @@ export const useAppStore = create<AppState>()(
           set((state) => ({
             profileServices: {
               ...state.profileServices,
-              [profileId]: mergeProfileServiceRules(
+              [profileId]: normalizeProfileServiceRules(
                 state.services,
                 extractApiArray<Service>(res.body, 'services')
               ),
@@ -547,8 +538,10 @@ export const useAppStore = create<AppState>()(
             api.getRuleFolders(profileId),
           ]);
           set({
-            customRules: normalizeCustomRules(extractApiArray<CustomRule>(rulesRes.body, 'rules')),
-            ruleFolders: extractApiArray<RuleFolder>(foldersRes.body, 'groups'),
+            customRules: normalizeControlDRules(extractApiArray<CustomRule>(rulesRes.body, 'rules')),
+            ruleFolders: normalizeControlDRuleFolders(
+              extractApiArray<RuleFolder>(foldersRes.body, 'groups')
+            ),
           });
         } catch {
           set({ error: 'Failed to refresh rules' });
@@ -585,25 +578,31 @@ export const useAppStore = create<AppState>()(
       },
 
       // Mutations
-      updateProfileServices: async (profileId, serviceId, status) => {
+      updateProfileServices: async (profileId, serviceId, status, via) => {
         if (get().settings.demoMode) {
           set((state) => ({
             services: state.services.map((s) =>
-              s.PK === serviceId ? { ...s, status } : s
-            ),
-          }));
-          return;
-        }
-        try {
-          await api.updateService(profileId, serviceId, status);
-          set((state) => ({
-            services: state.services.map((service) =>
-              service.PK === serviceId ? { ...service, status } : service
+              s.PK === serviceId ? { ...s, status, via } : s
             ),
             profileServices: {
               ...state.profileServices,
               [profileId]: (state.profileServices[profileId] ?? state.services).map((service) =>
-                service.PK === serviceId ? { ...service, status } : service
+                service.PK === serviceId ? { ...service, status, via } : service
+              ),
+            },
+          }));
+          return;
+        }
+        try {
+          await api.updateService(profileId, serviceId, status, via);
+          set((state) => ({
+            services: state.services.map((service) =>
+              service.PK === serviceId ? { ...service, status, via } : service
+            ),
+            profileServices: {
+              ...state.profileServices,
+              [profileId]: (state.profileServices[profileId] ?? state.services).map((service) =>
+                service.PK === serviceId ? { ...service, status, via } : service
               ),
             },
           }));

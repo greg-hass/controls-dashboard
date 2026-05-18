@@ -22,6 +22,13 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { Service, ServiceCategory, Profile } from '@/types/controld';
 
@@ -90,9 +97,19 @@ export function Services() {
     updateProfileServices(selectedProfile, serviceId, newStatus);
   };
 
+  const handleRouteService = (serviceId: string, location: string) => {
+    if (!selectedProfile) return;
+    if (location === 'default') {
+      updateProfileServices(selectedProfile, serviceId, 1);
+      return;
+    }
+    updateProfileServices(selectedProfile, serviceId, 3, location);
+  };
+
   // Stats
   const totalBlocked = currentServices.filter((s: Service) => s.status === 0).length;
-  const totalAllowed = currentServices.filter((s: Service) => s.status === 1).length;
+  const totalRouted = currentServices.filter((s: Service) => s.status === 3).length;
+  const totalAllowed = currentServices.filter((s: Service) => s.status !== 0).length;
 
   return (
     <div className="space-y-6">
@@ -106,6 +123,7 @@ export function Services() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="destructive">{totalBlocked} blocked</Badge>
+          <Badge variant="outline">{totalRouted} routed</Badge>
           <Badge variant="default">{totalAllowed} allowed</Badge>
         </div>
       </div>
@@ -181,6 +199,7 @@ export function Services() {
                         service={service}
                         category={category}
                         onToggle={() => handleToggleService(service.PK, service.status)}
+                        onRoute={(location) => handleRouteService(service.PK, location)}
                       />
                     ))}
                   </div>
@@ -195,6 +214,7 @@ export function Services() {
                   service={service}
                   category={service.category}
                   onToggle={() => handleToggleService(service.PK, service.status)}
+                  onRoute={(location) => handleRouteService(service.PK, location)}
                 />
               ))}
             </div>
@@ -216,11 +236,16 @@ function ServiceCard({
   service,
   category,
   onToggle,
+  onRoute,
 }: {
   service: Service;
   category: string;
   onToggle: () => void;
+  onRoute: (location: string) => void;
 }) {
+  const routeValue = service.status === 3 && service.via ? service.via : 'default';
+  const routeLocations = service.locations ?? [];
+
   return (
     <div
       className={cn(
@@ -256,6 +281,11 @@ function ServiceCard({
             <Ban className="w-3 h-3 text-red-500" />
             <span className="text-xs text-red-500">Blocked</span>
           </>
+        ) : service.status === 3 ? (
+          <>
+            <Globe className="w-3 h-3 text-blue-500" />
+            <span className="text-xs text-blue-500">Routed via {service.via}</span>
+          </>
         ) : (
           <>
             <Check className="w-3 h-3 text-emerald-500" />
@@ -263,6 +293,23 @@ function ServiceCard({
           </>
         )}
       </div>
+      {routeLocations.length > 0 && (
+        <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+          <Select value={routeValue} onValueChange={onRoute}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Route location" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">Default route</SelectItem>
+              {routeLocations.map((location) => (
+                <SelectItem key={location} value={location}>
+                  {location}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   );
 }
