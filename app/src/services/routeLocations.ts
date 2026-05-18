@@ -34,6 +34,28 @@ const isObject = (value: unknown): value is RawRouteLocation =>
 const readString = (value: unknown) =>
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 
+const regionNames = typeof Intl !== 'undefined' && 'DisplayNames' in Intl
+  ? new Intl.DisplayNames(['en'], { type: 'region' })
+  : undefined;
+
+const countryCodeToFlag = (code: string) => {
+  if (!/^[A-Z]{2}$/.test(code)) return undefined;
+  const base = 127397;
+  return [...code].map((letter) => String.fromCodePoint(letter.charCodeAt(0) + base)).join('');
+};
+
+const routeLocationFromIsoCountry = (code: string): RouteLocation | undefined => {
+  if (!/^[A-Z]{2}$/.test(code)) return undefined;
+  const country = regionNames?.of(code);
+  if (!country || country === code) return undefined;
+
+  return {
+    code,
+    country,
+    flag: countryCodeToFlag(code),
+  };
+};
+
 const pickCollection = (value: unknown): unknown[] => {
   if (Array.isArray(value)) return value;
   if (!isObject(value)) return [];
@@ -73,7 +95,10 @@ export const formatRouteLocation = (
   routeLocations: Record<string, RouteLocation> = {}
 ) => {
   const normalizedCode = code.toUpperCase();
-  const location = routeLocations[normalizedCode] ?? KNOWN_ROUTE_LOCATIONS[normalizedCode];
+  const location =
+    routeLocations[normalizedCode] ??
+    KNOWN_ROUTE_LOCATIONS[normalizedCode] ??
+    routeLocationFromIsoCountry(normalizedCode);
   const label = location?.country ?? location?.name ?? location?.city ?? normalizedCode;
 
   return {

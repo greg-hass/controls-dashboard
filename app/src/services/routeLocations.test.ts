@@ -21,4 +21,17 @@ describe('route location labels', () => {
 
     expect(formatRouteLocation('YYZ', locations).label).toBe('Canada');
   });
+
+  it('formats ISO country codes as countries with flags', () => {
+    expect(formatRouteLocation('AE')).toMatchObject({
+      code: 'AE',
+      flag: '🇦🇪',
+      label: 'United Arab Emirates',
+    });
+    expect(formatRouteLocation('GB')).toMatchObject({
+      code: 'GB',
+      flag: '🇬🇧',
+      label: 'United Kingdom',
+    });
+  });
 });
