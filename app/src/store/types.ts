@@ -43,6 +43,7 @@ export interface AppState {
   // UI State
   isLoading: boolean;
   error: string | null;
+  apiWarnings: string[];
   activeTab: string;
   darkMode: boolean;
   sidebarOpen: boolean;

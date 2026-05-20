@@ -22,6 +22,7 @@ export interface DataSlice {
   networkStats: NetworkStats[];
   routeLocations: Record<string, RouteLocation>;
   quickActions: QuickAction[];
+  apiWarnings: string[];
 
   // Data Loading
   loadAllData: () => Promise<void>;
@@ -32,6 +33,21 @@ export interface DataSlice {
   loadProfileFilters: (profileId: string) => Promise<void>;
   refreshRules: (profileId: string) => Promise<void>;
 }
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : 'Unknown error';
+
+type ApiWarningState = {
+  apiWarnings?: string[];
+};
+
+type StoreSet = (patch: ((state: ApiWarningState) => ApiWarningState) | ApiWarningState) => void;
+
+const appendApiWarning = (set: StoreSet, warning: string) => {
+  set((state) => ({
+    apiWarnings: [...(state.apiWarnings ?? []), warning],
+  }));
+};
 
 export const asArray = <T>(value: unknown): T[] => {
   if (Array.isArray(value)) {
@@ -135,7 +151,10 @@ const extractDevicesBody = (value: unknown): { devices: Device[] } => {
 
 let loadSequence = 0;
 
-const loadServicesByCategories = async (categories: ServiceCategory[]): Promise<Service[]> => {
+const loadServicesByCategories = async (
+  categories: ServiceCategory[],
+  warn?: (warning: string) => void
+): Promise<Service[]> => {
   const allServices: Service[] = [];
 
   for (const category of categories) {
@@ -149,15 +168,18 @@ const loadServicesByCategories = async (categories: ServiceCategory[]): Promise<
           status: 1,
         } as Service))
       );
-    } catch {
-      // Silently skip categories that fail to load
+    } catch (error) {
+      warn?.(`Services for category ${category.PK} could not be loaded: ${getErrorMessage(error)}`);
     }
   }
 
   return allServices;
 };
 
-const loadDeviceActivitySummaries = async (devices: Device[]): Promise<Record<string, ReturnType<typeof summarizeDeviceActivity>>> => {
+const loadDeviceActivitySummaries = async (
+  devices: Device[],
+  warn?: (warning: string) => void
+): Promise<Record<string, ReturnType<typeof summarizeDeviceActivity>>> => {
   const activityByDeviceId: Record<string, ReturnType<typeof summarizeDeviceActivity>> = {};
 
   for (const device of devices) {
@@ -165,8 +187,8 @@ const loadDeviceActivitySummaries = async (devices: Device[]): Promise<Record<st
       const res = await api.getDeviceActivity(device.PK);
       const entries = extractAccessEntries(res.body);
       activityByDeviceId[device.PK] = summarizeDeviceActivity(entries);
-    } catch {
-      // Silently skip devices that fail to load activity
+    } catch (error) {
+      warn?.(`Activity for device ${device.PK} could not be loaded: ${getErrorMessage(error)}`);
     }
   }
 
@@ -189,10 +211,11 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
   networkStats: [],
   routeLocations: {},
   quickActions: mock.mockQuickActions,
+  apiWarnings: [],
 
   loadAllData: async () => {
     const currentLoad = ++loadSequence;
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, apiWarnings: [] });
     try {
       const { settings } = get();
 
@@ -213,6 +236,7 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
           networkStats: mock.mockNetworkStats,
           routeLocations: normalizeRouteLocationRecords(mock.mockStorageRegions),
           quickActions: mock.mockQuickActions,
+          apiWarnings: [],
           isLoading: false,
         });
         return;
@@ -234,6 +258,7 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
         ipInfo: null,
         networkStats: [],
         routeLocations: {},
+        apiWarnings: [],
       });
 
       const [userRes, profilesRes, devicesRes, categoriesRes, ipRes, netRes, proxiesRes] = await Promise.all([
@@ -268,13 +293,19 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
         isLoading: false,
       });
 
-      void loadServicesByCategories(serviceCategories).then((allServices) => {
+      void loadServicesByCategories(
+        serviceCategories,
+        (warning) => appendApiWarning(set, warning)
+      ).then((allServices) => {
         if (currentLoad === loadSequence) {
           set({ services: allServices });
         }
       });
 
-      void loadDeviceActivitySummaries(devices).then((activityByDeviceId) => {
+      void loadDeviceActivitySummaries(
+        devices,
+        (warning) => appendApiWarning(set, warning)
+      ).then((activityByDeviceId) => {
         if (currentLoad === loadSequence) {
           set((state: any) => ({
             devices: state.devices.map((device: Device) => ({
@@ -301,6 +332,7 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
         ipInfo: null,
         networkStats: [],
         routeLocations: {},
+        apiWarnings: [],
         error: err instanceof Error ? err.message : 'Failed to load data',
         isLoading: false,
       });
@@ -329,7 +361,10 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
       const res = await api.getDevices();
       const devicesBody = extractDevicesBody(res.body);
       const devices = enrichDevicesWithProfileNames(devicesBody.devices, get().profiles);
-      const activityByDeviceId = await loadDeviceActivitySummaries(devices);
+      const activityByDeviceId = await loadDeviceActivitySummaries(
+        devices,
+        (warning) => appendApiWarning(set, warning)
+      );
       set({
         devices: devices.map((device) => ({
           ...device,
@@ -354,7 +389,10 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
         set({ error: 'No service categories loaded' });
         return;
       }
-      const allServices = await loadServicesByCategories(categories);
+      const allServices = await loadServicesByCategories(
+        categories,
+        (warning) => appendApiWarning(set, warning)
+      );
       set({ services: allServices });
     } catch {
       set({ error: 'Failed to refresh services' });
@@ -380,7 +418,10 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
       const rules = extractApiArray<Partial<Service>>(rulesRes.body, 'rules');
       const categories = extractApiArray<ServiceCategory>(catalogRes.body, 'categories');
 
-      const allCatalogServices = await loadServicesByCategories(categories);
+      const allCatalogServices = await loadServicesByCategories(
+        categories,
+        (warning) => appendApiWarning(set, warning)
+      );
       const profileServices = normalizeProfileServiceRules(allCatalogServices, rules);
 
       set((state: any) => ({
@@ -426,9 +467,13 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
       return;
     }
     try {
+      let foldersWarning: string | null = null;
       const [rulesRes, foldersRes] = await Promise.all([
         api.getCustomRules(profileId),
-        api.getRuleFolders(profileId).catch(() => ({ body: [], success: true })),
+        api.getRuleFolders(profileId).catch((error) => {
+          foldersWarning = `Rule folders could not be loaded: ${getErrorMessage(error)}`;
+          return { body: [], success: true };
+        }),
       ]);
 
       const rules = extractApiArray<Partial<CustomRule>>(rulesRes.body, 'rules');
@@ -438,6 +483,9 @@ export const createDataSlice = (set: any, get: any): DataSlice => ({
         customRules: normalizeControlDRules(rules),
         ruleFolders: normalizeControlDRuleFolders(folders),
       });
+      if (foldersWarning) {
+        appendApiWarning(set, foldersWarning);
+      }
     } catch {
       set({ error: 'Failed to refresh rules' });
     }

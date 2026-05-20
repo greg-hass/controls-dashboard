@@ -82,9 +82,10 @@ export const toControlDCustomRulePayload = (rule: Partial<CustomRule>) => ({
   'hostnames[]': rule.hostname,
 });
 
-class ControlDApi {
+export class ControlDApi {
   private token: string = '';
   private baseUrl: string = '/api';
+  private requestTimeoutMs: number = 15000;
 
   setToken(token: string) {
     this.token = token;
@@ -96,6 +97,10 @@ class ControlDApi {
 
   getToken(): string {
     return this.token;
+  }
+
+  setRequestTimeoutMs(timeoutMs: number) {
+    this.requestTimeoutMs = Math.max(0, timeoutMs);
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -114,10 +119,28 @@ class ControlDApi {
       headers.set('Content-Type', 'application/json');
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    const controller = new AbortController();
+    const timeout = this.requestTimeoutMs > 0
+      ? globalThis.setTimeout(() => controller.abort(), this.requestTimeoutMs)
+      : undefined;
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+        signal: options.signal ?? controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(`Control D API request timed out after ${this.requestTimeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      if (timeout !== undefined) {
+        globalThis.clearTimeout(timeout);
+      }
+    }
 
     let data: {
       success?: boolean;
@@ -371,7 +394,7 @@ class ControlDApi {
 
   // Access IPs
   async getAccessIPs(deviceId: string): Promise<ApiResponse<AccessIP[]>> {
-    return this.request<ApiResponse<AccessIP[]>>(`/access?device_id=${deviceId}`);
+    return this.request<ApiResponse<AccessIP[]>>(`/access?device_id=${encodeURIComponent(deviceId)}`);
   }
 
   async learnIP(deviceId: string, ip: string): Promise<ApiResponse<unknown>> {

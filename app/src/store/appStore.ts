@@ -32,6 +32,7 @@ export const useAppStore = create<AppState>()(
         // UI State
         isLoading: false,
         error: null,
+        apiWarnings: [],
         activeTab: 'overview',
         darkMode: true,
         sidebarOpen: true,

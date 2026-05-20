@@ -1,18 +1,20 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useAppStore } from '@/store/appStore';
 import { Layout } from '@/components/Layout';
-import { Overview } from '@/screens/Overview';
-import { Profiles } from '@/screens/Profiles';
-import { Devices } from '@/screens/Devices';
-import { Services } from '@/screens/Services';
-import { Rules } from '@/screens/Rules';
-import { QuickActions } from '@/screens/QuickActions';
-import { NetworkHealth } from '@/screens/NetworkHealth';
-import { Settings } from '@/screens/Settings';
 import { Toaster } from '@/components/ui/sonner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Spinner } from '@/components/ui/spinner';
 import './App.css';
+
+const Overview = lazy(() => import('@/screens/Overview').then((module) => ({ default: module.Overview })));
+const Profiles = lazy(() => import('@/screens/Profiles').then((module) => ({ default: module.Profiles })));
+const Devices = lazy(() => import('@/screens/Devices').then((module) => ({ default: module.Devices })));
+const Services = lazy(() => import('@/screens/Services').then((module) => ({ default: module.Services })));
+const Rules = lazy(() => import('@/screens/Rules').then((module) => ({ default: module.Rules })));
+const QuickActions = lazy(() => import('@/screens/QuickActions').then((module) => ({ default: module.QuickActions })));
+const NetworkHealth = lazy(() => import('@/screens/NetworkHealth').then((module) => ({ default: module.NetworkHealth })));
+const Settings = lazy(() => import('@/screens/Settings').then((module) => ({ default: module.Settings })));
 
 function AppContent() {
   const darkMode = useAppStore((state) => state.darkMode);
@@ -43,16 +45,18 @@ function AppContent() {
 
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<Overview />} />
-        <Route path="/profiles" element={<Profiles />} />
-        <Route path="/devices" element={<Devices />} />
-        <Route path="/services" element={<Services />} />
-        <Route path="/rules" element={<Rules />} />
-        <Route path="/actions" element={<QuickActions />} />
-        <Route path="/network" element={<NetworkHealth />} />
-        <Route path="/settings" element={<Settings />} />
-      </Routes>
+      <Suspense fallback={<div className="flex min-h-96 items-center justify-center"><Spinner className="size-6 text-muted-foreground" /></div>}>
+        <Routes>
+          <Route path="/" element={<Overview />} />
+          <Route path="/profiles" element={<Profiles />} />
+          <Route path="/devices" element={<Devices />} />
+          <Route path="/services" element={<Services />} />
+          <Route path="/rules" element={<Rules />} />
+          <Route path="/actions" element={<QuickActions />} />
+          <Route path="/network" element={<NetworkHealth />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
+      </Suspense>
     </Layout>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   buildControlDFormBody,
+  ControlDApi,
   toControlDCustomRulePayload,
   toControlDDevicePayload,
   toControlDServiceRulePayload,
@@ -45,56 +46,112 @@ describe('Control D API contract tests', () => {
 
   beforeEach(() => {
     mockFetch.mockReset();
+    vi.useRealTimers();
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, body: {} }),
+    });
   });
 
-  // Helper to create API instance with mocked fetch
   const createApi = () => {
-    // We need to import the class after mocking fetch
-    // Since ControlDApi is not exported, we test via the store or direct fetch inspection
-    // Instead, we'll verify the payload functions produce correct output
-    return { mockFetch };
+    const client = new ControlDApi();
+    client.setToken('token_123');
+    client.setBaseUrl('https://proxy.example');
+    return client;
   };
 
-  it('updateFilter payload produces correct form body', () => {
-    const { mockFetch } = createApi();
-    const body = buildControlDFormBody({ status: 1 });
-    expect(body.toString()).toBe('status=1');
+  it('updateFilter calls the documented filter modify route with a form body', async () => {
+    const client = createApi();
+
+    await client.updateFilter('prof_123', 'ads & trackers', 1);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://proxy.example/profiles/prof_123/filters/filter/ads%20%26%20trackers',
+      expect.objectContaining({
+        method: 'PUT',
+        body: expect.any(URLSearchParams),
+      })
+    );
+    expect((mockFetch.mock.calls[0][1].body as URLSearchParams).toString()).toBe('status=1');
   });
 
-  it('getProfileOptions route is global not profile-scoped', () => {
-    // Verified by audit: route changed from /profiles/${pk}/options to /profiles/options
-    expect(true).toBe(true);
+  it('getProfileOptions calls the global profile options route', async () => {
+    const client = createApi();
+
+    await client.getProfileOptions();
+
+    expect(mockFetch.mock.calls[0][0]).toBe('https://proxy.example/profiles/options');
   });
 
-  it('updateProfileOption payload includes status and value', () => {
-    const body = buildControlDFormBody({ status: 2, value: 'detailed' });
-    expect(body.toString()).toBe('status=2&value=detailed');
+  it('updateProfileOption sends documented status and value fields', async () => {
+    const client = createApi();
+
+    await client.updateProfileOption('prof_123', 'safesearch', 1, 'strict');
+
+    expect(mockFetch.mock.calls[0][0]).toBe('https://proxy.example/profiles/prof_123/options/safesearch');
+    expect(mockFetch.mock.calls[0][1].method).toBe('PUT');
+    expect((mockFetch.mock.calls[0][1].body as URLSearchParams).toString()).toBe('status=1&value=strict');
   });
 
-  it('updateDefaultRule payload includes do and status', () => {
-    const body = buildControlDFormBody({ do: 0, status: 1 });
-    expect(body.toString()).toBe('do=0&status=1');
+  it('getDeviceActivity delegates to the documented access route', async () => {
+    const client = createApi();
+
+    await client.getDeviceActivity('dev_123');
+
+    expect(mockFetch.mock.calls[0][0]).toBe('https://proxy.example/access?device_id=dev_123');
   });
 
-  it('createProfile payload includes name and clone_profile_id', () => {
-    const body = buildControlDFormBody({ name: 'Test Profile', clone_profile_id: 'prof_456' });
-    expect(body.toString()).toBe('name=Test+Profile&clone_profile_id=prof_456');
+  it('updateDefaultRule sends do status and via as form fields', async () => {
+    const client = createApi();
+
+    await client.updateDefaultRule('prof_123', 3, 1, 'LON');
+
+    expect(mockFetch.mock.calls[0][0]).toBe('https://proxy.example/profiles/prof_123/default');
+    expect((mockFetch.mock.calls[0][1].body as URLSearchParams).toString()).toBe('do=3&status=1&via=LON');
   });
 
-  it('createRuleFolder payload includes name, do, status', () => {
-    const body = buildControlDFormBody({ name: 'Security', do: 0, status: 1 });
-    expect(body.toString()).toBe('name=Security&do=0&status=1');
+  it('createProfile uses a form body with documented profile fields', async () => {
+    const client = createApi();
+
+    await client.createProfile({ name: 'Test Profile', PK: 'prof_456' });
+
+    expect(mockFetch.mock.calls[0][0]).toBe('https://proxy.example/profiles');
+    expect(mockFetch.mock.calls[0][1].method).toBe('POST');
+    expect((mockFetch.mock.calls[0][1].body as URLSearchParams).toString()).toBe('name=Test+Profile&clone_profile_id=prof_456');
   });
 
-  it('batchUpdateFilters payload includes JSON-encoded filters array', () => {
+  it('batchUpdateFilters sends the documented filters array field', async () => {
+    const client = createApi();
     const filters = [
       { filter: 'ads', status: 1 },
       { filter: 'malware', status: 0 },
     ];
-    const body = buildControlDFormBody({ filters: JSON.stringify(filters) });
+
+    await client.batchUpdateFilters('prof_123', filters);
+
+    const body = mockFetch.mock.calls[0][1].body as URLSearchParams;
     expect(body.toString()).toContain('filters=');
     const filtersParam = decodeURIComponent(body.toString().replace('filters=', ''));
     const parsed = JSON.parse(filtersParam);
     expect(parsed).toEqual(filters);
+  });
+
+  it('aborts requests after the configured timeout', async () => {
+    vi.useFakeTimers();
+    const client = createApi();
+    client.setRequestTimeoutMs(25);
+    mockFetch.mockImplementation((_url, init: RequestInit) => (
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
+      })
+    ));
+
+    const request = expect(client.getUser()).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(25);
+
+    await request;
   });
 });
