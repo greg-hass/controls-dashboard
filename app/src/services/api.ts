@@ -6,7 +6,6 @@ import type {
   ServiceCategory,
   Service,
   Filter,
-  ExternalFilter,
   CustomRule,
   RuleFolder,
   DefaultRule,
@@ -50,7 +49,8 @@ export const toControlDServiceRulePayload = (status: number, via?: string) => {
     return { do: 3, status: 1, via };
   }
 
-  return { do: 0, status: 0 };
+  // allow / no rule - disable the rule entirely
+  return { status: 0 };
 };
 
 export const toControlDDevicePayload = (device: Partial<Device>) => {
@@ -188,12 +188,12 @@ class ControlDApi {
     return this.request<ApiResponse<Filter[]>>(`/profiles/${pk}/filters`);
   }
 
-  async getExternalFilters(pk: string): Promise<ApiResponse<ExternalFilter[]>> {
-    return this.request<ApiResponse<ExternalFilter[]>>(`/profiles/${pk}/filters/external`);
+  async getExternalFilters(pk: string): Promise<ApiResponse<Filter[]>> {
+    return this.request<ApiResponse<Filter[]>>(`/profiles/${pk}/filters/external`);
   }
 
   async updateFilter(pk: string, filter: string, status: number): Promise<ApiResponse<unknown>> {
-    return this.request<ApiResponse<unknown>>(`/profiles/${pk}/filters/filter/${filter}`, {
+    return this.request<ApiResponse<unknown>>(`/profiles/${pk}/filters/${filter}`, {
       method: 'PUT',
       body: buildControlDFormBody({ status }),
     });
@@ -215,6 +215,14 @@ class ControlDApi {
     return this.request<ApiResponse<Service[]>>(`/services/categories/${category}`);
   }
 
+  async getServices(category: string): Promise<ApiResponse<Service[]>> {
+    return this.getServicesByCategory(category);
+  }
+
+  async getDeviceActivity(deviceId: string): Promise<ApiResponse<AccessIP[]>> {
+    return this.request<ApiResponse<AccessIP[]>>(`/devices/${deviceId}/activity`);
+  }
+
   async getProfileServices(pk: string): Promise<ApiResponse<Service[]>> {
     return this.request<ApiResponse<Service[]>>(`/profiles/${pk}/services`);
   }
@@ -229,6 +237,10 @@ class ControlDApi {
       method: 'PUT',
       body: buildControlDFormBody(toControlDServiceRulePayload(status, via)),
     });
+  }
+
+  async updateProfileService(profileId: string, serviceId: string, status: number, via?: string): Promise<ApiResponse<unknown>> {
+    return this.updateService(profileId, serviceId, status, via);
   }
 
   // Custom Rules
@@ -319,6 +331,14 @@ class ControlDApi {
     });
   }
 
+  async updateDeviceProfile(deviceId: string, profileId: string): Promise<ApiResponse<Device>> {
+    return this.updateDevice(deviceId, { profile: profileId });
+  }
+
+  async updateDeviceStatus(deviceId: string, status: number): Promise<ApiResponse<Device>> {
+    return this.updateDevice(deviceId, { status });
+  }
+
   async deleteDevice(pk: string): Promise<ApiResponse<void>> {
     return this.request<ApiResponse<void>>(`/devices/${pk}`, {
       method: 'DELETE',
@@ -350,11 +370,11 @@ class ControlDApi {
 
   // Analytics
   async getAnalyticsLevels(): Promise<ApiResponse<AnalyticsLevel[]>> {
-    return this.request<ApiResponse<AnalyticsLevel[]>>('/analytics/levels');
+    return this.request<ApiResponse<AnalyticsLevel[]>>(`/analytics/levels`);
   }
 
   async getStorageRegions(): Promise<ApiResponse<StorageRegion[]>> {
-    return this.request<ApiResponse<StorageRegion[]>>('/analytics/endpoints');
+    return this.request<ApiResponse<StorageRegion[]>>(`/analytics/endpoints`);
   }
 
   async getProxies(): Promise<ApiResponse<RouteLocation[]>> {

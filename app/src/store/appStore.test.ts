@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractAccessEntries, extractApiArray } from './appStore';
+import { extractAccessEntries, extractApiArray } from './dataSlice';
 
 describe('Control D response extraction', () => {
   it('uses documented collection keys instead of flattening sibling metadata', () => {

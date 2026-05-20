@@ -52,15 +52,10 @@ export async function loadSchedulerState(): Promise<DeviceSchedule[]> {
   return res.schedules ?? [];
 }
 
-export async function scheduleDevicePause(input: {
-  deviceId: string;
-  deviceName?: string;
-  durationMinutes: number;
-  restoreStatus?: number;
-}): Promise<DeviceSchedule> {
+export async function scheduleDevicePause(deviceId: string, durationMinutes: number): Promise<DeviceSchedule> {
   const res = await requestScheduler<{ schedule: DeviceSchedule }>('/scheduler/soft-disable', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ deviceId, durationMinutes }),
   });
 
   if (!res.schedule) {
@@ -70,12 +65,9 @@ export async function scheduleDevicePause(input: {
   return res.schedule;
 }
 
-export async function restoreDevicePause(input: {
-  deviceId: string;
-  restoreStatus?: number;
-}): Promise<void> {
+export async function restoreDevicePause(deviceId: string): Promise<void> {
   await requestScheduler('/scheduler/restore', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ deviceId }),
   });
 }

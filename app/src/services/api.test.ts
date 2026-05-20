@@ -13,7 +13,7 @@ describe('Control D API payloads', () => {
 
   it('maps dashboard service states to Control D rule form fields', () => {
     expect(toControlDServiceRulePayload(0)).toEqual({ do: 0, status: 1 });
-    expect(toControlDServiceRulePayload(1)).toEqual({ do: 0, status: 0 });
+    expect(toControlDServiceRulePayload(1)).toEqual({ status: 0 }); // allow = disable rule
     expect(toControlDServiceRulePayload(2)).toEqual({ do: 1, status: 1 });
     expect(toControlDServiceRulePayload(3, 'LON')).toEqual({ do: 3, status: 1, via: 'LON' });
   });

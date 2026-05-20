@@ -42,11 +42,12 @@ export function NetworkHealth() {
     location: s.location,
   }));
 
+  const totalPops = networkStats.length || 1; // avoid division by zero
   const serviceAvailability = [
-    { name: 'DNS', available: networkStats.filter((n) => getServices(n).dns).length, total: networkStats.length },
-    { name: 'DoH', available: networkStats.filter((n) => getServices(n).doh).length, total: networkStats.length },
-    { name: 'DoT', available: networkStats.filter((n) => getServices(n).dot).length, total: networkStats.length },
-    { name: 'Proxy', available: networkStats.filter((n) => getServices(n).proxy).length, total: networkStats.length },
+    { name: 'DNS', available: networkStats.filter((n) => getServices(n).dns).length, total: totalPops },
+    { name: 'DoH', available: networkStats.filter((n) => getServices(n).doh).length, total: totalPops },
+    { name: 'DoT', available: networkStats.filter((n) => getServices(n).dot).length, total: totalPops },
+    { name: 'Proxy', available: networkStats.filter((n) => getServices(n).proxy).length, total: totalPops },
   ];
 
   return (
