@@ -61,6 +61,8 @@ export const toControlDDevicePayload = (device: Partial<Device>) => {
   if (device.client_count !== undefined) payload.client_count = device.client_count;
   if (device.profile !== undefined) payload.profile_id = device.profile;
   if (device.status !== undefined) payload.status = device.status;
+  if (device.icon !== undefined) payload.icon = device.icon;
+  if (device.type !== undefined) payload.icon = device.type;
 
   return payload;
 };
@@ -68,6 +70,7 @@ export const toControlDDevicePayload = (device: Partial<Device>) => {
 const customRuleActionToDo = (rule: Partial<CustomRule>) => {
   if (rule.action === 'block') return 0;
   if (rule.action === 'allow' || rule.action === 'bypass') return 1;
+  if (rule.action === 'redirect') return 3;
   return 2;
 };
 
@@ -154,14 +157,21 @@ class ControlDApi {
   async createProfile(profile: Partial<Profile>): Promise<ApiResponse<Profile>> {
     return this.request<ApiResponse<Profile>>('/profiles', {
       method: 'POST',
-      body: JSON.stringify(profile),
+      body: buildControlDFormBody({
+        name: profile.name,
+        clone_profile_id: profile.PK,
+      }),
     });
   }
 
-  async updateProfile(pk: string, profile: Partial<Profile>): Promise<ApiResponse<Profile>> {
+  async updateProfile(pk: string, profile: Partial<Profile> & { disable?: number; lock?: number }): Promise<ApiResponse<Profile>> {
     return this.request<ApiResponse<Profile>>(`/profiles/${pk}`, {
       method: 'PUT',
-      body: JSON.stringify(profile),
+      body: buildControlDFormBody({
+        name: profile.name,
+        disable_ttl: profile.disable === 0 ? 1 : undefined,
+        lock_status: profile.lock ? 1 : undefined,
+      }),
     });
   }
 
@@ -172,14 +182,14 @@ class ControlDApi {
   }
 
   // Profile Options
-  async getProfileOptions(pk: string): Promise<ApiResponse<Record<string, unknown>>> {
-    return this.request<ApiResponse<Record<string, unknown>>>(`/profiles/${pk}/options`);
+  async getProfileOptions(): Promise<ApiResponse<Record<string, unknown>>> {
+    return this.request<ApiResponse<Record<string, unknown>>>('/profiles/options');
   }
 
-  async updateProfileOption(pk: string, name: string, value: unknown): Promise<ApiResponse<unknown>> {
+  async updateProfileOption(pk: string, name: string, status: number, value?: string | number): Promise<ApiResponse<unknown>> {
     return this.request<ApiResponse<unknown>>(`/profiles/${pk}/options/${name}`, {
       method: 'PUT',
-      body: JSON.stringify({ value }),
+      body: buildControlDFormBody({ status, value }),
     });
   }
 
@@ -193,16 +203,16 @@ class ControlDApi {
   }
 
   async updateFilter(pk: string, filter: string, status: number): Promise<ApiResponse<unknown>> {
-    return this.request<ApiResponse<unknown>>(`/profiles/${pk}/filters/${filter}`, {
+    return this.request<ApiResponse<unknown>>(`/profiles/${pk}/filters/filter/${encodeURIComponent(filter)}`, {
       method: 'PUT',
       body: buildControlDFormBody({ status }),
     });
   }
 
-  async batchUpdateFilters(pk: string, filters: Record<string, number>): Promise<ApiResponse<unknown>> {
+  async batchUpdateFilters(pk: string, filters: Array<{ filter: string; status: number }>): Promise<ApiResponse<unknown>> {
     return this.request<ApiResponse<unknown>>(`/profiles/${pk}/filters`, {
       method: 'PUT',
-      body: buildControlDFormBody(filters),
+      body: buildControlDFormBody({ filters: JSON.stringify(filters) }),
     });
   }
 
@@ -220,7 +230,7 @@ class ControlDApi {
   }
 
   async getDeviceActivity(deviceId: string): Promise<ApiResponse<AccessIP[]>> {
-    return this.request<ApiResponse<AccessIP[]>>(`/devices/${deviceId}/activity`);
+    return this.getAccessIPs(deviceId);
   }
 
   async getProfileServices(pk: string): Promise<ApiResponse<Service[]>> {
@@ -279,14 +289,24 @@ class ControlDApi {
   async createRuleFolder(pk: string, folder: Partial<RuleFolder>): Promise<ApiResponse<RuleFolder>> {
     return this.request<ApiResponse<RuleFolder>>(`/profiles/${pk}/groups`, {
       method: 'POST',
-      body: JSON.stringify(folder),
+      body: buildControlDFormBody({
+        name: folder.name,
+        do: folder.do,
+        status: folder.status,
+        via: folder.via,
+      }),
     });
   }
 
   async updateRuleFolder(pk: string, folder: string, data: Partial<RuleFolder>): Promise<ApiResponse<RuleFolder>> {
     return this.request<ApiResponse<RuleFolder>>(`/profiles/${pk}/groups/${folder}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: buildControlDFormBody({
+        name: data.name,
+        do: data.do,
+        status: data.status,
+        via: data.via,
+      }),
     });
   }
 
@@ -301,10 +321,10 @@ class ControlDApi {
     return this.request<ApiResponse<DefaultRule>>(`/profiles/${pk}/default`);
   }
 
-  async updateDefaultRule(pk: string, action: string): Promise<ApiResponse<DefaultRule>> {
+  async updateDefaultRule(pk: string, doValue: number, status: number, via?: string): Promise<ApiResponse<DefaultRule>> {
     return this.request<ApiResponse<DefaultRule>>(`/profiles/${pk}/default`, {
       method: 'PUT',
-      body: JSON.stringify({ action }),
+      body: buildControlDFormBody({ do: doValue, status, via }),
     });
   }
 
